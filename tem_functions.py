@@ -73,6 +73,105 @@ def setup(image_name, threshold, extra_display):
 	return color_image, dist_transform, sure_bg
 
 
+def get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, display):
+	"""obtains watershed markers by thresholding distance transform"""
+	threshold, fg = cv.threshold(dist_transform, dist_transform_thresh*dist_transform.max(), 255, 0)
+
+	# Finding unknown region
+	fg = np.uint8(fg)
+	unknown_2 = cv.subtract(sure_bg, fg)
+    
+    # Marker labelling
+	threshold, pre_watershed_markers = cv.connectedComponents(fg)
+	# Add one to all labels so that sure background is not 0, but 1
+	pre_watershed_markers = pre_watershed_markers+1
+	# Now, mark the region of unknown with zero
+	pre_watershed_markers[unknown_2==255] = 0
+
+	# copy input image
+	watershed_color_copy = color_image.copy()
+
+	watershed_markers = cv.watershed(watershed_color_copy, pre_watershed_markers)
+
+	if display:
+		display_images([pre_watershed_markers, watershed_markers], ["Pre-Watershed Markers", "Watershed Markers"], [0,0])
+
+	return watershed_markers
+
+
+def get_areas(watershed_markers):
+	"""get the areas of the particles"""
+
+	# dictionary mapping colors to their areas
+	particle_areas = {}
+
+	# loop through pixels in watershed markers and count the number of pixels for each color
+	for row in range(1, len(watershed_markers) - 1):
+		for col in range(1, len(watershed_markers[0]) - 1):
+			# if pixel not in background
+			if watershed_markers[row][col] != 1:
+				# get current pixel and its neighbours 
+				current = watershed_markers[row][col]
+				# add current pixel to dictionary
+				if current not in particle_areas:
+					particle_areas[current] = 1
+				else:
+					particle_areas[current] += 1
+
+	# remove -1 key from particle_areas because it represents contours drawn by cv.watershed()
+	del particle_areas[-1]
+
+	# loop to adjust areas from number of pixels to nm^2
+	for particle in particle_areas:
+		current_area = particle_areas[particle] * nm_per_pixel**2
+		particle_areas[particle] = current_area
+
+	return particle_areas
+
+
+# TODO: differentiate paramters and variable names
+def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
+	"""outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
+	max_radius = 3*expected_radius
+	dist_transform_thresh = 0.25
+	while max_radius > (2*expected_radius):
+
+	    watershed_markers = get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, 0)
+	    
+	    # dictionary mapping colors to their pixels
+	    particle_colors = {}
+
+	    # loop through pixels in watershed markers
+	    for row in range(1, len(watershed_markers) - 1):
+	        for col in range(1, len(watershed_markers[0]) - 1):
+	            # if pixel not in background
+	            if watershed_markers[row][col] != 1:
+	                # get current pixel and its neighbours 
+	                current = watershed_markers[row][col]
+	                # add current pixel to dictionary
+	                if current not in particle_colors:
+	                    particle_colors[current] = 1
+	                else:
+	                    particle_colors[current] += 1
+	                    
+	    # remove -1 key from particle_colors because it represents bad contours drawn by cv.watershed()
+	    del particle_colors[-1]
+	    
+	    # loop to adjust areas from number of pixels to nm^2
+	    max_radius = 0
+	    for particle in particle_colors:
+	        current_area = particle_colors[particle] * nm_per_pixel**2
+	        particle_colors[particle] = [current_area, (current_area/np.pi)**0.5]
+	        if (current_area/np.pi)**0.5 > max_radius:
+	            max_radius = (current_area/np.pi)**0.5
+	            
+	    # print(dist_transform_thresh, max_radius)
+	            
+	    dist_transform_thresh += 0.05
+
+	return dist_transform_thresh - 0.05 # TODO this seems bad
+
+
 def get_contour_colors(watershed_markers, color_image):
 	"""returns dictionary mapping colors to their pixels"""
 	# copy input image
@@ -151,11 +250,6 @@ def get_contour_colors(watershed_markers, color_image):
 
 	return contour_colors, chords_color_copy
 
-# input pixels as tuples
-def pixel_distance(pixel1, pixel2):
-	"""finds the distance between two pixels"""
-	return np.power(np.power(pixel1[0] - pixel2[0], 2) + np.power(pixel1[1] - pixel2[1], 2), 0.5)
-
 
 def find_centerpoints(contour_colors):
 	"""calculates the centerpoint for each color"""
@@ -181,6 +275,13 @@ def find_centerpoints(contour_colors):
 		particles[color] += [("y", center_y*nm_per_pixel)]
 
 	return particles
+
+
+# input pixels as tuples
+def pixel_distance(pixel1, pixel2):
+	"""finds the distance between two pixels"""
+	return np.power(np.power(pixel1[0] - pixel2[0], 2) + np.power(pixel1[1] - pixel2[1], 2), 0.5)
+
 
 #TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
 def get_long_chord_lengths(particles, contour_colors):
@@ -326,72 +427,3 @@ def draw_short_lengths(image, short_pairs):
 	for short_pair in short_pairs:
 		cv.line(image, short_pair[0], short_pair[1], [0,255,255])
 
-# TODO: differentiate paramters and variable names
-def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
-	"""outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
-	max_radius = 3*expected_radius
-	dist_transform_thresh = 0.25
-	while max_radius > (2*expected_radius):
-	    # apply current threshold 
-	    threshold, fg = cv.threshold(dist_transform, dist_transform_thresh*dist_transform.max(), 255, 0)
-	    
-	    # Finding unknown region
-	    fg = np.uint8(fg)
-	    unknown_2 = cv.subtract(sure_bg, fg)
-	    
-	    # Marker labelling
-	    threshold, pre_watershed_markers = cv.connectedComponents(fg)
-	    # Add one to all labels so that sure background is not 0, but 1
-	    pre_watershed_markers = pre_watershed_markers+1
-	    # Now, mark the region of unknown with zero
-	    pre_watershed_markers[unknown_2==255] = 0
-	    
-	    # copy input image
-	    watershed_color_copy = color_image.copy()
-
-	    watershed_markers = cv.watershed(watershed_color_copy, pre_watershed_markers)
-	    watershed_color_copy[pre_watershed_markers == -1] = [255,0,0]
-	    
-	    # dictionary mapping colors to their pixels
-	    particle_colors = {}
-
-	    # loop through pixels in watershed markers
-	    for row in range(1, len(watershed_markers) - 1):
-	        for col in range(1, len(watershed_markers[0]) - 1):
-	            # if pixel not in background
-	            if watershed_markers[row][col] != 1:
-	                # get current pixel and its neighbours 
-	                current = watershed_markers[row][col]
-	                # add current pixel to dictionary
-	                if current not in particle_colors:
-	                    particle_colors[current] = 1
-	                else:
-	                    particle_colors[current] += 1
-	                    
-	    # remove -1 key from particle_colors because it represents bad contours drawn by cv.watershed()
-	    del particle_colors[-1]
-	    
-	    # loop to adjust areas from number of pixels to nm^2
-	    max_radius = 0
-	    for particle in particle_colors:
-	        current_area = particle_colors[particle] * nm_per_pixel**2
-	        particle_colors[particle] = [current_area, (current_area/np.pi)**0.5]
-	        if (current_area/np.pi)**0.5 > max_radius:
-	            max_radius = (current_area/np.pi)**0.5
-	            
-	    # print(dist_transform_thresh, max_radius)
-	            
-	    dist_transform_thresh += 0.05
-
-	return dist_transform_thresh - 0.05 # TODO this seems bad
-
-
-# beginning thresholding
-# get pre_watershed_markers
-# watershed contours
-# thresholding for distance transform
-
-# intial threshold
-# dist_transform
-# watershed markers
-# long short chord lengths
