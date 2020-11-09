@@ -35,6 +35,12 @@ def display_images(images, titles, grayscales):
 				axs[i].set_title(titles[i])
 
 
+# TODO: test
+def save_images(images, titles):
+	for i in range(len(images)):
+		plt.savefig(str(images[i]) + "_" + titles[i] + ".png", dpi=500)
+
+
 def get_threshold(threshold):
 	"""TODO: returns automatic thresholding of grayscale image"""
 	return threshold
@@ -182,8 +188,8 @@ def get_contour_colors(watershed_markers, color_image):
 
 	contour_size = 0
 	# loop through pixels in watershed markers
-	for row in range(1, len(watershed_markers) - 1):
-	    for col in range(1, len(watershed_markers[0]) - 1):
+	for row in range(1, len(watershed_markers) - 1):		# TODO: don't ignore border particles
+	    for col in range(1, len(watershed_markers[0]) - 1):	# TODO: don't ignore border particles
 	        # if pixel not in background
 	        if watershed_markers[row][col] != 1:
 	            # get current pixel and its neighbours 
@@ -275,6 +281,58 @@ def find_centerpoints(contour_colors):
 		particles[color] += [("y", center_y*nm_per_pixel)]
 
 	return particles
+
+
+def match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas):
+    """Replaces agglomerates with particles and outputs a single dictionary"""
+    out_contour_colors = {}
+    out_particles = {}
+    max_color = np.max(list(agg_particles.keys()))
+    
+    # loop through agglomerate particles
+    for agg_particle in agg_particles:
+    
+        # if particle has a radius more than twice expected size
+        if agg_areas[agg_particle] > np.pi*(expected_radius*2)**2:
+            # then particle is agglomerate
+        
+            # find max and min x and y for given agglomerate
+            # TODO: make this 100000000x better using numpy
+            max_x = 0
+            max_y = 0
+            min_x = 10000
+            min_y = 10000
+            for pixel in agg_contour_colors[agg_particle]:
+                if pixel[0] > max_x:
+                    max_x = pixel[0]
+                if pixel[1] > max_y:
+                    max_y = pixel[1]
+                if pixel[0] < min_x:
+                    min_x = pixel[0]
+                if pixel[1] < min_y:
+                    min_y = pixel[1]
+
+            # collect list of particles in particles dictionary that fall within agglomerate
+            replacements = []
+            for particle in particles:
+                x = particles[particle][0][1]
+                y = particles[particle][1][1]
+                if ((x < max_x) and (x > min_x) and (y < max_y) and (y > min_y)):
+                    replacements += [particle]
+
+            # add particles to output dictionaries
+            for i in range(len(replacements)):
+                out_particles[max_color+i] = particles[replacements[i]]
+                out_contour_colors[max_color+i] = contour_colors[replacements[i]]
+
+            # update max color
+            max_color += len(replacements)
+        
+        else:
+            out_particles[agg_particle] = agg_particles[agg_particle]
+            out_contour_colors[agg_particle] = agg_contour_colors[agg_particle]
+        
+    return out_particles, out_contour_colors
 
 
 # input pixels as tuples
@@ -426,4 +484,5 @@ def draw_short_lengths(image, short_pairs):
 	"""draws short chord lengths on an image"""
 	for short_pair in short_pairs:
 		cv.line(image, short_pair[0], short_pair[1], [0,255,255])
+
 
