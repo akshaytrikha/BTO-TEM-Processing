@@ -35,7 +35,7 @@ def display_images(images, titles, grayscales):
 				axs[i].set_title(titles[i])
 
 
-# TODO: test
+# TODO: delete since it's context based?
 def save_images(images, titles):
 	for i in range(len(images)):
 		plt.savefig(str(images[i]) + "_" + titles[i] + ".png", dpi=500)
@@ -486,3 +486,7 @@ def draw_short_lengths(image, short_pairs):
 		cv.line(image, short_pair[0], short_pair[1], [0,255,255])
 
 
+# TODO: account for particles that cross the y-axis into the negative z
+def get_prism_dimensions(particles):
+	"""finds the dimensions of the prism"""
+	
