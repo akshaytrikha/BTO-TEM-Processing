@@ -47,7 +47,7 @@ def get_threshold(threshold):
 
 
 def setup(image_name, threshold, extra_display):
-	"""perform setup steps: grayscale, gaussian blur, binary threshold, noise removel, dilation"""
+	"""perform setup steps: grayscale, gaussian blur, binary threshold, noise removel, dilation, distance transform"""
 
 	# get color and grayscale images
 	color_image = cv.imread(image_name)
@@ -63,11 +63,11 @@ def setup(image_name, threshold, extra_display):
 	kernel = np.ones((10,10),np.uint8)
 	opening = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, iterations=2)
 
-	# sure background area
-	sure_bg = cv.dilate(opening, kernel, iterations=3)
-
 	# Finding distance transform - lighter spots mean further away from contours
 	dist_transform = cv.distanceTransform(opening,cv.DIST_L2, 5) # mask size needs to be 0 or 3 or 5
+
+	# sure background area
+	sure_bg = cv.dilate(opening, kernel, iterations=3)
 
 	# display all substeps if desired 
 	if extra_display:
@@ -135,7 +135,7 @@ def get_areas(watershed_markers):
 	return particle_areas
 
 
-# TODO: differentiate paramters and variable names
+# TODO: differentiate parameters and variable names
 def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
 	"""outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
 	max_radius = 3*expected_radius
@@ -177,7 +177,7 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
 
 	return dist_transform_thresh - 0.05 # TODO this seems bad
 
-
+# TODO: just loop through the output of watershed markers, where the border pixel are already marked with -1 and see what pixels they neighbor
 def get_contour_colors(watershed_markers, color_image):
 	"""returns dictionary mapping colors to their pixels"""
 	# copy input image
