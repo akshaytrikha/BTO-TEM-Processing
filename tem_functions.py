@@ -8,8 +8,9 @@ import numpy as np                 # NumPy for quick maths
 from collections import Counter    # dictionary quick maths
 
 ### constants
-# nm_per_pixel = 100 / 46
-# nm_per_pixel = 100 / 95 	# In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
+# nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
+# nm_per_pixel = 100 / 95 	
+# nm_per_pixel = 100 / 95 	# In 2.jpg there are 
 nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 expected_radius = 100
 
