@@ -13,7 +13,7 @@ from collections import Counter    # dictionary quick maths
 # nm_per_pixel = 1000 / 131 # In 500nm_epoxy_2.jpg there are 131 pixels per 1 micrometer 
 # nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
-expected_radius = 250
+expected_radius = 250 # in nm
 
 
 def display_images(images, titles, grayscales):
