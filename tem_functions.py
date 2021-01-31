@@ -495,50 +495,74 @@ def draw_short_lengths(image, short_pairs):
 
 def get_c(particles):
     """sets the c radius for each of the particles to be the average of the a and b radii for that particle"""
+    # loop through all the particles
     for particle in particles:
+        # get particle data
         particle_data = particles[particle]
+        # if the particle has an x and y position, a and b radii, and an angle
         if len(particle_data) == 5:
-            # c = a + b / 2
+            # set c radius to be average of a and b radii
             c_radius = (particle_data[2][1] + particle_data[4][1]) / 2
+            # add c radius to the particles dictionary
             particles[particle] += [("c", c_radius)]
     return particles
 
 
 def set_max_c(particles):
     """sets the c radius for each of the particles to be the maximum average of the a and b radii for all of the particles"""
+    # keep track of maximum c radius
     max_c = 0
+    
+    # loop through particles
     for particle in particles:
+        # get particle data
         particle_data = particles[particle]
+        # if the particle has an x and y position, a and b radii, and an angle
         if len(particle_data) == 5:
-            # c = a + b / 2
+            # set c radius to be average of a and b radii
             c_radius = (particle_data[2][1] + particle_data[4][1]) / 2
+            # if c radius is the biggest yet
             if c_radius > max_c:
+                # update the maximum c radius
                 max_c = c_radius
+    
+    # loop through particles
     for particle in particles:
         particle_data = particles[particle]
+        # if the particle has an x and y position, a and b radii, and an angle, set each particle to have the maximum c radius
         if len(particle_data) == 5:
+            # add c radius to the particles dictionary
             particles[particle] += [("c", max_c)]
     return particles
 
 
 def get_layer_info(particles):
     """gets the relevant info from a particle dictionary representing a single layer so that it can be combined with other layers"""
+    # keeping track of maximum and minimum x and y positions
     max_x = 0
     min_x = 10000
     max_y = 0
     min_y = 10000
+    # keeping track of maximum c radius and the volume of particles in the layer
     max_c = 0
     layer_volume = 0
 
+    # loop through particles
     for particle in particles:
+        # get particle data
         particle_data = particles[particle]
+        # if the particle has an x and y position, a, b, and c radii, and an angle
         if len(particle_data) == 6:
+            # extract particle info
             x = particle_data[0][1]
             y = particle_data[1][1]
             a = particle_data[2][1]
             b = particle_data[4][1]
             c = particle_data[5][1]
+            # add the volume of the particle to the layer volume
             layer_volume += (4/3)*np.pi*a*b*c
+            
+            # update minimum and maximum x and y values
             if (x - a) < min_x:
                 min_x = x-a
             if (x + a) > max_x:
@@ -547,12 +571,15 @@ def get_layer_info(particles):
                 min_y = y-a
             if (y + a) > max_y:
                 max_y = y+a
+            # update maximum c radius
             if c > max_c:
                 max_c = c
 
+    # set x and y lengths of the layer 
     x_length = max_x - min_x
     y_length = max_y - min_y
-
+    
+    # find volume fraction of the layer
     volume_fraction = layer_volume/(x_length*y_length*max_c*2)
 
     return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
@@ -560,37 +587,50 @@ def get_layer_info(particles):
 
 def combine_layers(particle_layers, layer_infos, filename):
     """creating a text file from layer(s)"""
+    # open the file to write in
     with open(filename, "w") as output_file:
+        # keeping track height, volume, and x and y lengths of prism
         total_height = 1
         total_volume = 0
-        layer_heights = []
         x_length_prism = 0
         y_length_prism = 0
-        x_position_prism = 100000
-        y_position_prism = 100000
+        # keeping track of the height of each layer
+        layer_heights = []
+        # TODO: do this better
+        x_position_prism = 100000000000
+        y_position_prism = 100000000000
+        # looping through the layer(s)
         for info in layer_infos:
             total_height += ((info[4]*2) + 1)
             layer_heights += [info[4]*2]
             total_volume += info[5]
+            # TODO: record max and min x and y values of prism and recalculate x and y lengths
             if info[0] > x_length_prism:
                 x_length_prism = info[0]
             if info[1] > y_length_prism:
                 y_length_prism = info[1]
+            # if x and/or y position are the lowest yet, update the prism x and/or y postion 
             if info[2] < x_position_prism:
                 x_position_prism = info[2]
             if info[3] < y_position_prism:
                 y_position_prism = info[3]
-        #thickness = total_height / 100
+        # calculate prism volume fraction
         volume_fraction = total_volume/(x_length_prism*y_length_prism*total_height)
 
         particleID = 1
         layer_counter = 0
         height_adjustment = 1
+        # loop through the layers
         for layer in particle_layers:
+            # update the current height at which to place particles by adding in half the height of new layer
             current_height = height_adjustment + (layer_heights[layer_counter]/2)
+            # loop through the particles
             for particle in layer:
+                # get particle data
                 particle_data = layer[particle]
+                # if the particle has an x and y position, a, b, and c radii, and an angle
                 if len(particle_data) == 6:
+                    # write all the data for the particle to the text file
                     output_file.writelines(particle_data[2][0] + str(particleID) + " " + str(particle_data[2][1]) + "[nm]" + "\n")       # a
                     output_file.writelines(particle_data[4][0] + str(particleID) + " " + str(particle_data[4][1]) + "[nm]" + "\n")       # b
                     output_file.writelines(particle_data[5][0] + str(particleID) + " " + str(particle_data[5][1]) + "[nm]" + "\n")       # c
@@ -598,11 +638,15 @@ def combine_layers(particle_layers, layer_infos, filename):
                     output_file.writelines(particle_data[1][0] + str(particleID) + " " + str(particle_data[1][1]) + "[nm]" + "\n")       # y
                     output_file.writelines("z" + str(particleID) + " " + str(current_height) + "[nm]" + "\n")                            # z
                     output_file.writelines(particle_data[3][0] + str(particleID) + " " + str(particle_data[3][1]) + "[degrees]" + "\n")  # theta
+                    # increment particleID
                     particleID += 1
 
+            # add the height of the layer we just looped through and a space between layers to the height adjustment
             height_adjustment += (layer_heights[layer_counter] + 1)
+            # increment layer counter
             layer_counter += 1
 
+        # write the information for the composite to the end of the file
         output_file.writelines("*****************\n")
         output_file.writelines("total_particles " + str(particleID-1) + "\n")                    # number of particles
         output_file.writelines("total_volume_ellipsoids " + str(total_volume) + "[nm^3]" + "\n") # total volume
