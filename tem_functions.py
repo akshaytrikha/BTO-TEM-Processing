@@ -585,6 +585,87 @@ def get_layer_info(particles):
     return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
 
 
+def plot_ellipsoid(a_radius, b_radius, c_radius, center_x, center_y, center_z, theta, ax, rendering_type):
+    """plots an ellipsoid with the given properties"""
+    
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+
+    # converting theta from degrees to radians
+    theta = theta/180*np.pi
+
+    x1_1 = np.outer(a * np.cos(u), np.sin(v)) + center_x
+    y1_1 = np.outer(b * np.sin(u), np.sin(v)) + center_y
+    z = np.outer(c * np.ones(np.size(u)), np.cos(v)) + center_z
+    x = np.cos(theta) * (x1_1 - cx) - np.sin(theta) * (y1_1 - cy) + center_x
+    y = np.sin(theta) * (x1_1 - cx) + np.cos(theta) * (y1_1 - cy) + center_y
+
+    if rendering_type == "surface":
+    #colored ellipsoid -- here the particles look like colored balloons: pretty but takes a couple extra seconds to run.
+        ax[0].plot_surface(x, y, z, linewidth=0.0)
+        ax[1].plot_surface(x, y, z, linewidth=0.0)
+        ax[2].plot_surface(x, y, z, linewidth=0.0)
+
+    if renering_type == "wireframe":
+    #wireframe rendering -- this is a mesh sort of look. Runs more quickly.
+        ax[0].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+        ax[1].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+        ax[2].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+
+
+def layer_render(particles, particle_info, rendering_type="wireframe"):
+    """renders a dictionary of particles"""
+    fig1 = plt.figure(1)
+    fig2 = plt.figure(2)
+    fig3 = plt.figure(3)
+
+    # ax = fig1.add_subplot(111, projection='3d')
+    ax = Axes3D(fig1)
+    ax.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    ax.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    ax.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    # ay = fig2.add_subplot(111, projection='3d')
+    ay = Axes3D(fig2)
+    ay.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    ay.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    ay.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    # az = fig3.add_subplot(111, projection='3d')
+    az = Axes3D(fig3)
+    az.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    az.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    az.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    ax.view_init(elev=0, azim=0)
+    ay.view_init(elev=0, azim=-90)
+    az.view_init(elev=90, azim=-90)
+
+    for particle in particles:
+        # get particle data
+        particle_data = particles[particle]
+        # if the particle has an x and y position, a, b, and c radii, and an angle
+        if len(particle_data) == 6:
+            # extract particle info
+            x = particle_data[0][1]
+            y = particle_data[1][1]
+            a = particle_data[2][1]
+            b = particle_data[4][1]
+            c = particle_data[5][1]
+            theta = particle_data[6][1]
+            z = (particle_info[4]/2)+1
+            
+            # plot the ellipsoid
+            plot_ellipsoid(a, b, c, x, y, z, theta, [ax, ay, az], rendering_type)
+
+    for axis in 'xyz':
+        getattr(ax, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
+        getattr(ay, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
+        getattr(az, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
+
+    plt.show()
+
+
 def combine_layers(particle_layers, layer_infos, filename):
     """creating a text file from layer(s)"""
     # open the file to write in
