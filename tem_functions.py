@@ -341,14 +341,14 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
         
     return out_particles, out_contour_colors
 
-
-    # input pixels as tuples
+    
+# input pixels as tuples
 def pixel_distance(pixel1, pixel2):
     """finds the distance between two pixels"""
     return np.power(np.power(pixel1[0] - pixel2[0], 2) + np.power(pixel1[1] - pixel2[1], 2), 0.5)
 
 
-    #TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
+#TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
 def get_long_chord_lengths(particles, contour_colors):
     """finds the long chord lengths for the contours and returns them as pairs of pixel coordinates"""
 
