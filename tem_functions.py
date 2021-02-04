@@ -6,6 +6,7 @@ import cv2 as cv                   # OpenCV for image processing
 import matplotlib.pyplot as plt    # Matplotlib for visualizing
 import numpy as np                 # NumPy for quick maths
 from collections import Counter    # dictionary quick maths
+import time                        # measure function execution times
 
 ### constants
 # nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
@@ -141,9 +142,9 @@ def get_areas(watershed_markers):
 # TODO: differentiate parameters and variable names
 def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
     """outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
-    max_radius = 3*expected_radius
+    max_radius = 3 * expected_radius # just needs to be something > 2 * expected_radius
     dist_transform_thresh = 0.25
-    while max_radius > (2*expected_radius):
+    while max_radius > (2 * expected_radius):
 
         watershed_markers = get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, 0)
         
@@ -170,8 +171,8 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
         # loop to adjust areas from number of pixels to nm^2
         max_radius = 0
         for particle in particle_colors:
-            current_area = particle_colors[particle] * nm_per_pixel**2
-            particle_colors[particle] = [current_area, (current_area/np.pi)**0.5]
+            current_area = particle_colors[particle] * nm_per_pixel**2  # don't need to square number of pixels because they already represent an area
+            particle_colors[particle] = [current_area, (current_area/np.pi)**0.5] # store [actual area, estimated radius]
             if (current_area/np.pi)**0.5 > max_radius:
                 max_radius = (current_area/np.pi)**0.5
                 
@@ -181,7 +182,8 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
 
     return dist_transform_thresh - 0.05 # TODO this seems bad
 
-    # TODO: just loop through the output of watershed markers, where the border pixel are already marked with -1 and see what pixels they neighbor
+
+# TODO: just loop through the output of watershed markers, where the border pixel are already marked with -1 and see what pixels they neighbor
 def get_contour_colors(watershed_markers, color_image):
     """returns dictionary mapping colors to their pixels"""
     # copy input image
@@ -737,6 +739,144 @@ def combine_layers(particle_layers, layer_infos, filename):
         output_file.writelines("x_position_prism " + str(x_position_prism) + "[nm]" + "\n")      # x position prism
         output_file.writelines("y_position_prism " + str(y_position_prism) + "[nm]" + "\n")      # x position prism
         output_file.writelines("volume_fraction " + str(volume_fraction))                        # volume fraction
-
+ 
         # close output file
         output_file.close()
+
+
+def measure(func, params):
+    """measure the execution time of input function with given parameters list"""
+    start = timeit.timeit()
+    func()
+    end = timeit.timeit()
+
+
+def pipeline(threshold, image_name, debug=False):
+    """combines all functions to create image processing pipeline, prints each function's execution time if debug=True"""
+
+    start_pipe = time.perf_counter()
+
+    if debug:
+        # setup, finding optimal watershed threshold, populating particles dictionary
+        start = time.perf_counter()
+        color_image_1, dist_transform_1, sure_bg_1 = setup(image_name, threshold, False)
+        end = time.perf_counter()
+        print("setup() ran in", str(end - start) + "s")
+        start = time.perf_counter()
+        dist_transform_thresh_1 = get_watershed_threshold(dist_transform_1, sure_bg_1, color_image_1, expected_radius)
+        end = time.perf_counter()
+        print("get_watershed_threshold() ran in", str(end - start) + "s")
+        start = time.perf_counter()
+        watershed_markers_1 = get_watershed_markers(dist_transform_1, dist_transform_thresh_1, sure_bg_1, color_image_1, False)
+        agg_watershed_markers_1 = get_watershed_markers(dist_transform_1, 0.1, sure_bg_1, color_image_1, False)
+        end = time.perf_counter()
+        print("get_watershed_markers() for particles and agglomerates ran in", str(end - start) + "s")
+        start = time.perf_counter()
+        contour_colors_1, chords_color_copy_1 = get_contour_colors(watershed_markers_1, color_image_1)
+        agg_contour_colors_1, agg_chords_color_copy_1 = get_contour_colors(agg_watershed_markers_1, color_image_1)
+        end = time.perf_counter()
+        print("get_contour_colors() for particles and agglomerates ran in", str(end - start) + "s")
+
+        # find particle centerpoints
+        start = time.perf_counter()
+        particles_1 = find_centerpoints(contour_colors_1)
+        agg_particles_1 = find_centerpoints(agg_contour_colors_1)
+        end = time.perf_counter()
+        print("find_centerpoints() for particles and agglomerates ran in", str(end - start) + "s")
+
+        # calculate particle areas
+        start = time.perf_counter()
+        particle_areas_1 = get_areas(watershed_markers_1)
+        agg_areas_1 = get_areas(agg_watershed_markers_1)
+        end = time.perf_counter()
+        print("get_areas() for particles and agglomerates ran in", str(end - start) + "s")
+
+        # merge dictionaries of particles and agglomerates
+        start = time.perf_counter()
+        merge_particles_1, merge_contour_colors_1 = match_images(particles_1, contour_colors_1, agg_particles_1, agg_contour_colors_1, agg_areas_1)
+        end = time.perf_counter()
+        print("match_images() ran in", str(end - start) + "s")
+
+        # long and short chord lengths
+        start = time.perf_counter()
+        long_pairs_1, merge_particles_1 = get_long_chord_lengths(merge_particles_1, merge_contour_colors_1)
+        end = time.perf_counter()
+        print("get_long_chord_lengths() ran in", str(end - start) + "s")
+        start = time.perf_counter()
+        short_pairs_1, merge_particles_1 = get_short_chord_lengths(merge_particles_1, merge_contour_colors_1, long_pairs_1)
+        end = time.perf_counter()
+        print("get_short_chord_lengths() ran in", str(end - start) + "s")
+
+        # calculate c radii for merged particles
+        start = time.perf_counter()
+        merge_particles_1 = get_c(merge_particles_1)
+        end = time.perf_counter()
+        print("get_c() ran in", str(end - start) + "s")
+
+        # get layer stats
+        start = time.perf_counter()
+        info_1 = get_layer_info(merge_particles_1)
+        end = time.perf_counter()
+        print("get_layer_info() ran in", str(end - start) + "s")
+
+        # output multiple layer data into .txt
+        start = time.perf_counter()
+        combine_layers([merge_particles_1], [info_1], "./500nm_epoxy/500nm_epoxy_15.txt")
+        end = time.perf_counter()
+        print("combine_layers() ran in", str(end - start) + "s")
+
+    else:
+        # setup, finding optimal watershed threshold, populating particles dictionary
+        color_image_1, dist_transform_1, sure_bg_1 = setup(image_name, threshold, False)
+        print("setup()")
+        dist_transform_thresh_1 = get_watershed_threshold(dist_transform_1, sure_bg_1, color_image_1, expected_radius)
+        print("get_watershed_threshold()")
+        watershed_markers_1 = get_watershed_markers(dist_transform_1, dist_transform_thresh_1, sure_bg_1, color_image_1, False)
+        agg_watershed_markers_1 = get_watershed_markers(dist_transform_1, 0.1, sure_bg_1, color_image_1, False)
+        print("get_watershed_markers()")
+        contour_colors_1, chords_color_copy_1 = get_contour_colors(watershed_markers_1, color_image_1)
+        agg_contour_colors_1, agg_chords_color_copy_1 = get_contour_colors(agg_watershed_markers_1, color_image_1)
+        print("get_contour_colors() for particles and agglomerates ran in", str(end - start) + "s")
+
+        # find particle centerpoints
+        particles_1 = find_centerpoints(contour_colors_1)
+        agg_particles_1 = find_centerpoints(agg_contour_colors_1)
+        print("find_centerpoints()")
+
+        # calculate particle areas
+        particle_areas_1 = get_areas(watershed_markers_1)
+        agg_areas_1 = get_areas(agg_watershed_markers_1)
+        print("get_areas()")
+
+        # merge dictionaries of particles and agglomerates
+        merge_particles_1, merge_contour_colors_1 = match_images(particles_1, contour_colors_1, agg_particles_1, agg_contour_colors_1, agg_areas_1)
+        print("match_images()")
+
+        # long and short chord lengths
+        long_pairs_1, merge_particles_1 = get_long_chord_lengths(merge_particles_1, merge_contour_colors_1)
+        print("get_long_chord_lengths()")
+        short_pairs_1, merge_particles_1 = get_short_chord_lengths(merge_particles_1, merge_contour_colors_1, long_pairs_1)
+        print("get_short_chord_lengths()")
+
+        # calculate c radii for merged particles
+        merge_particles_1 = get_c(merge_particles_1)
+        print("get_c()")
+
+        # get layer stats
+        info_1 = get_layer_info(merge_particles_1)
+        print("get_layer_info()")
+
+        # output multiple layer data into .txt
+        combine_layers([merge_particles_1], [info_1], "./500nm_epoxy/500nm_epoxy_15.txt")
+        print("combine_layers()")
+
+    end_pipe = time.perf_counter()
+
+    print("\n pipeline ran succesfully in", str(end_pipe - start_pipe) + "s")
+
+# run pipeline as script for given image(s) and thresholds
+def main():
+    pipeline(70, "./500nm_epoxy/500nm_epoxy_15.jpg", True)
+    
+if __name__ == "__main__":
+    main()
