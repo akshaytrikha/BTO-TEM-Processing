@@ -4,6 +4,7 @@
 
 import cv2 as cv                   # OpenCV for image processing
 import matplotlib.pyplot as plt    # Matplotlib for visualizing
+from mpl_toolkits.mplot3d import Axes3D # Axes3D for 3D visualization
 import numpy as np                 # NumPy for quick maths
 from collections import Counter    # dictionary quick maths
 import time                        # measure function execution times
@@ -307,8 +308,8 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
             # TODO: make this 100000000x better using numpy
             max_x = 0
             max_y = 0
-            min_x = 10000
-            min_y = 10000
+            min_x = 10000000
+            min_y = 10000000
             for pixel in agg_contour_colors[agg_particle]:
                 if pixel[0] > max_x:
                     max_x = pixel[0]
@@ -587,54 +588,26 @@ def get_layer_info(particles):
     return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
 
 
-def plot_ellipsoid(a_radius, b_radius, c_radius, center_x, center_y, center_z, theta, ax, rendering_type):
-    """plots an ellipsoid with the given properties"""
-    
-    u = np.linspace(0, 2 * np.pi, 100)
-    v = np.linspace(0, np.pi, 100)
-
-    # converting theta from degrees to radians
-    theta = theta/180*np.pi
-
-    x1_1 = np.outer(a * np.cos(u), np.sin(v)) + center_x
-    y1_1 = np.outer(b * np.sin(u), np.sin(v)) + center_y
-    z = np.outer(c * np.ones(np.size(u)), np.cos(v)) + center_z
-    x = np.cos(theta) * (x1_1 - cx) - np.sin(theta) * (y1_1 - cy) + center_x
-    y = np.sin(theta) * (x1_1 - cx) + np.cos(theta) * (y1_1 - cy) + center_y
-
-    if rendering_type == "surface":
-    #colored ellipsoid -- here the particles look like colored balloons: pretty but takes a couple extra seconds to run.
-        ax[0].plot_surface(x, y, z, linewidth=0.0)
-        ax[1].plot_surface(x, y, z, linewidth=0.0)
-        ax[2].plot_surface(x, y, z, linewidth=0.0)
-
-    if renering_type == "wireframe":
-    #wireframe rendering -- this is a mesh sort of look. Runs more quickly.
-        ax[0].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
-        ax[1].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
-        ax[2].plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
-
-
-def layer_render(particles, particle_info, rendering_type="wireframe"):
+def layer_render(particles, layer_info, rendering_type="wireframe"):
     """renders a dictionary of particles"""
     fig1 = plt.figure(1)
     fig2 = plt.figure(2)
     fig3 = plt.figure(3)
 
-    # ax = fig1.add_subplot(111, projection='3d')
-    ax = Axes3D(fig1)
+    ax = fig1.add_subplot(111, projection='3d')
+    # ax = Axes3D(fig1)
     ax.set_xlabel("$X$", fontsize = 20, rotation = 150)
     ax.set_ylabel("$Y$", fontsize = 20, rotation = 150)
     ax.set_zlabel("$Z$", fontsize = 20, rotation = 150)
 
-    # ay = fig2.add_subplot(111, projection='3d')
-    ay = Axes3D(fig2)
+    ay = fig2.add_subplot(111, projection='3d')
+    # ay = Axes3D(fig2)
     ay.set_xlabel("$X$", fontsize = 20, rotation = 150)
     ay.set_ylabel("$Y$", fontsize = 20, rotation = 150)
     ay.set_zlabel("$Z$", fontsize = 20, rotation = 150)
 
-    # az = fig3.add_subplot(111, projection='3d')
-    az = Axes3D(fig3)
+    az = fig3.add_subplot(111, projection='3d')
+    # az = Axes3D(fig3)
     az.set_xlabel("$X$", fontsize = 20, rotation = 150)
     az.set_ylabel("$Y$", fontsize = 20, rotation = 150)
     az.set_zlabel("$Z$", fontsize = 20, rotation = 150)
@@ -649,21 +622,44 @@ def layer_render(particles, particle_info, rendering_type="wireframe"):
         # if the particle has an x and y position, a, b, and c radii, and an angle
         if len(particle_data) == 6:
             # extract particle info
-            x = particle_data[0][1]
-            y = particle_data[1][1]
-            a = particle_data[2][1]
-            b = particle_data[4][1]
-            c = particle_data[5][1]
-            theta = particle_data[6][1]
-            z = (particle_info[4]/2)+1
+            center_x = particle_data[0][1]
+            center_y = particle_data[1][1]
+            a_radius = particle_data[2][1]
+            b_radius = particle_data[4][1]
+            c_radius = particle_data[5][1]
+            theta = particle_data[3][1]
+            center_z = layer_info[4]+1
             
             # plot the ellipsoid
-            plot_ellipsoid(a, b, c, x, y, z, theta, [ax, ay, az], rendering_type)
+            u = np.linspace(0, 2 * np.pi, 100)
+            v = np.linspace(0, np.pi, 100)
 
-    for axis in 'xyz':
-        getattr(ax, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
-        getattr(ay, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
-        getattr(az, 'set_{}lim'.format(axis))((0, 1817.9594305919986-52.63010653047917))
+            # converting theta from degrees to radians
+            theta = theta/180*np.pi
+
+            x1_1 = np.outer(a_radius * np.cos(u), np.sin(v)) + center_x
+            y1_1 = np.outer(b_radius * np.sin(u), np.sin(v)) + center_y
+            z = np.outer(c_radius * np.ones(np.size(u)), np.cos(v)) + center_z
+            x = np.cos(theta) * (x1_1 - center_x) - np.sin(theta) * (y1_1 - center_y) + center_x
+            y = np.sin(theta) * (x1_1 - center_x) + np.cos(theta) * (y1_1 - center_y) + center_y
+
+            if rendering_type == "surface":
+            #colored ellipsoid -- here the particles look like colored balloons: pretty but takes a couple extra seconds to run.
+                ax.plot_surface(x, y, z, linewidth=0.0)
+                ay.plot_surface(x, y, z, linewidth=0.0)
+                az.plot_surface(x, y, z, linewidth=0.0)
+
+            if rendering_type == "wireframe":
+            #wireframe rendering -- this is a mesh sort of look. Runs more quickly.
+                ax.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+                ay.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+                az.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+
+    ax.set_zlim(0, (layer_info[2]+layer_info[0]))
+    ay.set_zlim(0, (layer_info[2]+layer_info[0]))
+    az.set_zlim(0, (layer_info[2]+layer_info[0]))
+    plt.xlim([layer_info[2], layer_info[2]+layer_info[0]])
+    plt.ylim([layer_info[3], layer_info[3]+layer_info[1]])
 
     plt.show()
 
@@ -751,7 +747,7 @@ def measure(func, params):
     end = timeit.timeit()
 
 
-def pipeline(threshold, image_name, debug=False):
+def pipeline(image_names, thresholds, output_file, debug=False):
     """combines all functions to create image processing pipeline, prints each function's execution time if debug=True"""
 
     start_pipe = time.perf_counter()
@@ -759,7 +755,7 @@ def pipeline(threshold, image_name, debug=False):
     if debug:
         # setup, finding optimal watershed threshold, populating particles dictionary
         start = time.perf_counter()
-        color_image_1, dist_transform_1, sure_bg_1 = setup(image_name, threshold, False)
+        color_image_1, dist_transform_1, sure_bg_1 = setup(image_names[0], thresholds[0], False)
         end = time.perf_counter()
         print("setup() ran in", str(end - start) + "s")
         start = time.perf_counter()
@@ -821,62 +817,58 @@ def pipeline(threshold, image_name, debug=False):
 
         # output multiple layer data into .txt
         start = time.perf_counter()
-        combine_layers([merge_particles_1], [info_1], "./500nm_epoxy/500nm_epoxy_15.txt")
+        combine_layers([merge_particles_1], [info_1], output_file)
         end = time.perf_counter()
         print("combine_layers() ran in", str(end - start) + "s")
 
     else:
-        # setup, finding optimal watershed threshold, populating particles dictionary
-        color_image_1, dist_transform_1, sure_bg_1 = setup(image_name, threshold, False)
-        print("setup()")
-        dist_transform_thresh_1 = get_watershed_threshold(dist_transform_1, sure_bg_1, color_image_1, expected_radius)
-        print("get_watershed_threshold()")
-        watershed_markers_1 = get_watershed_markers(dist_transform_1, dist_transform_thresh_1, sure_bg_1, color_image_1, False)
-        agg_watershed_markers_1 = get_watershed_markers(dist_transform_1, 0.1, sure_bg_1, color_image_1, False)
-        print("get_watershed_markers()")
-        contour_colors_1, chords_color_copy_1 = get_contour_colors(watershed_markers_1, color_image_1)
-        agg_contour_colors_1, agg_chords_color_copy_1 = get_contour_colors(agg_watershed_markers_1, color_image_1)
-        print("get_contour_colors() for particles and agglomerates ran in", str(end - start) + "s")
+        particle_layers = []
+        layer_infos = []
 
-        # find particle centerpoints
-        particles_1 = find_centerpoints(contour_colors_1)
-        agg_particles_1 = find_centerpoints(agg_contour_colors_1)
-        print("find_centerpoints()")
+        for i in range(len(image_names)):
+            # setup, finding optimal watershed threshold, populating particles dictionary
+            color_image, dist_transform, sure_bg = setup(image_names[i], thresholds[i], False)
+            dist_transform_thresh = get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius)
+            watershed_markers = get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, False)
+            agg_watershed_markers = get_watershed_markers(dist_transform, 0.1, sure_bg, color_image, False)
+            contour_colors, chords_color_copy = get_contour_colors(watershed_markers, color_image)
+            agg_contour_colors, agg_chords_color_copy = get_contour_colors(agg_watershed_markers, color_image)
 
-        # calculate particle areas
-        particle_areas_1 = get_areas(watershed_markers_1)
-        agg_areas_1 = get_areas(agg_watershed_markers_1)
-        print("get_areas()")
+            # find particle centerpoints
+            particles = find_centerpoints(contour_colors)
+            agg_particles = find_centerpoints(agg_contour_colors)
 
-        # merge dictionaries of particles and agglomerates
-        merge_particles_1, merge_contour_colors_1 = match_images(particles_1, contour_colors_1, agg_particles_1, agg_contour_colors_1, agg_areas_1)
-        print("match_images()")
+            # calculate particle areas
+            particle_areas = get_areas(watershed_markers)
+            agg_areas = get_areas(agg_watershed_markers)
 
-        # long and short chord lengths
-        long_pairs_1, merge_particles_1 = get_long_chord_lengths(merge_particles_1, merge_contour_colors_1)
-        print("get_long_chord_lengths()")
-        short_pairs_1, merge_particles_1 = get_short_chord_lengths(merge_particles_1, merge_contour_colors_1, long_pairs_1)
-        print("get_short_chord_lengths()")
+            # merge dictionaries of particles and agglomerates
+            merge_particles, merge_contour_colors = match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas)
 
-        # calculate c radii for merged particles
-        merge_particles_1 = get_c(merge_particles_1)
-        print("get_c()")
+            # long and short chord lengths
+            long_pairs, merge_particles = get_long_chord_lengths(merge_particles, merge_contour_colors)
+            short_pairs, merge_particles = get_short_chord_lengths(merge_particles, merge_contour_colors, long_pairs)
 
-        # get layer stats
-        info_1 = get_layer_info(merge_particles_1)
-        print("get_layer_info()")
+            # calculate c radii for merged particles
+            merge_particles = get_c(merge_particles)
+
+            # get layer stats
+            info = get_layer_info(merge_particles)
+
+            # add layer data to lists
+            particle_layers += [merge_particles]
+            layer_infos += [info]
 
         # output multiple layer data into .txt
-        combine_layers([merge_particles_1], [info_1], "./500nm_epoxy/500nm_epoxy_15.txt")
-        print("combine_layers()")
+        combine_layers(particle_layers, layer_infos, output_file)
 
     end_pipe = time.perf_counter()
 
-    print("\n pipeline ran succesfully in", str(end_pipe - start_pipe) + "s")
+    print("\npipeline ran succesfully in", str(end_pipe - start_pipe) + "s")
 
 # run pipeline as script for given image(s) and thresholds
 def main():
-    pipeline(70, "./500nm_epoxy/500nm_epoxy_15.jpg", True)
+    pipeline(["./500nm_epoxy/500nm_epoxy_15.jpg"], [70], "./500nm_epoxy/500nm_epoxy_15.txt", True)
     
 if __name__ == "__main__":
     main()
