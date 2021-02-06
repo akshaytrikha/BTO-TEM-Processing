@@ -8,14 +8,17 @@ from mpl_toolkits.mplot3d import Axes3D # Axes3D for 3D visualization
 import numpy as np                 # NumPy for quick maths
 from collections import Counter    # dictionary quick maths
 import time                        # measure function execution times
+from scipy.optimize import fsolve  # used for solving system of nonlin eqs. (particle intersections)
+import warnings                    # (particle intersections)
 
 ### constants
 # nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
 # nm_per_pixel = 100 / 95 	
 # nm_per_pixel = 1000 / 131 # In 500nm_epoxy_2.jpg there are 131 pixels per 1 micrometer 
 # nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
-nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
-expected_radius = 250 # in nm
+# nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
+nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
+expected_radius = 100 # in nm
 
 
 def display_images(images, titles, grayscales):
@@ -586,6 +589,63 @@ def get_layer_info(particles):
     volume_fraction = layer_volume/(x_length*y_length*max_c*2)
 
     return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
+
+
+def double_solve(f1, f2, x0, y0):
+    func = lambda x: [f1(x[0], x[1]), f2(x[0], x[1])]
+    return fsolve(func, [x0, y0])
+
+
+def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
+    phi1 = theta1 * np.pi / 180
+    phi2 = theta2 * np.pi / 180
+
+    test1 = lambda x, y: x ** 2 + 1 - y
+    test2 = lambda x, y: y - 3
+    res_test = double_solve(test1, test2, 1, 0)
+
+
+    eq1 = lambda x, y: ((x - cx1) * np.cos(phi1) + (y - cy1) * np.sin(phi1)) ** 2 / a1 ** 2 + (
+            (x - cx1) * np.sin(phi1) - (y - cy1) * np.cos(phi1)) ** 2 / b1 ** 2 - 1
+    eq2 = lambda x, y: ((x - cx2) * np.cos(phi2) + (y - cy2) * np.sin(phi2)) ** 2 / a2 ** 2 + (
+            (x - cx2) * np.sin(phi2) - (y - cy2) * np.cos(phi2)) ** 2 / b2 ** 2 - 1
+    startx = min(cx1, cx2) + abs(cx1 - cx2) / 2
+    starty = min(cy1, cy2) + abs(cy1 - cy2) / 2
+
+    res = double_solve(eq1, eq2, startx, starty)
+
+
+def layer_check_intersections(particles):
+    d = particles
+
+    particle_counter = 0
+
+    for particle in particles:
+        particle_counter = particle.key()
+
+
+
+    j = 1
+    count = 0
+    for a in range(len(d)):
+        i = j
+        for b in range(len(d) + 1 - j):
+            dist = np.sqrt((d[j][3] - d[i][3]) ** 2 + (d[j][4] - d[i][4]) ** 2)
+            max_diff = d[j][0] + d[i][0]
+            if dist < max_diff and not i == j and d[j][5] == d[i][5]:
+                try:
+                    check_intersection(d[j][0], d[j][1], d[j][3], d[j][4], d[j][6], d[i][0], d[i][1], d[i][3], d[i][4],
+                                       d[i][6])
+                    print(np.array([i, j]))
+                    count = count + 1
+                    i = i + 1
+                except RuntimeWarning:
+                    # print('error')
+                    i = i + 1
+                    continue
+            else:
+                i = i + 1
+        j = j + 1
 
 
 def layer_render(particles, layer_info, rendering_type="wireframe"):
