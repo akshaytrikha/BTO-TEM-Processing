@@ -592,11 +592,13 @@ def get_layer_info(particles):
 
 
 def double_solve(f1, f2, x0, y0):
+    """solves the system of equations"""
     func = lambda x: [f1(x[0], x[1]), f2(x[0], x[1])]
     return fsolve(func, [x0, y0])
 
 
 def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
+    """checks for intersections between two particles"""
     phi1 = theta1 * np.pi / 180
     phi2 = theta2 * np.pi / 180
 
@@ -616,36 +618,43 @@ def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
 
 
 def layer_check_intersections(particles):
-    d = particles
-
+    """returns the particles that intersect for a given layer"""
     particle_counter = 0
 
-    for particle in particles:
-        particle_counter = particle.key()
+    intersecting_particles = []
 
+    for particle1 in particles:
+        particle_counter = particle1
+        for particle2 in particles:
+            if particle2 > particle_counter:
+                # get particle data
+                particle_data1 = particles[particle1]
+                particle_data2 = particles[particle2]
+                # if the particle has an x and y position, a, b, and c radii, and an angle
+                if len(particle_data1) == 6 and len(particle_data2) == 6:
+                    # extract particle info
+                    x1 = particle_data1[0][1]
+                    y1 = particle_data1[1][1]
+                    a1 = particle_data1[2][1]
+                    b1 = particle_data1[4][1]
+                    c1 = particle_data1[5][1]
+                    theta1 = particle_data1[3][1]
 
+                    x2 = particle_data2[0][1]
+                    y2 = particle_data2[1][1]
+                    a2 = particle_data2[2][1]
+                    b2 = particle_data2[4][1]
+                    c2 = particle_data2[5][1]
+                    theta2 = particle_data2[3][1]
 
-    j = 1
-    count = 0
-    for a in range(len(d)):
-        i = j
-        for b in range(len(d) + 1 - j):
-            dist = np.sqrt((d[j][3] - d[i][3]) ** 2 + (d[j][4] - d[i][4]) ** 2)
-            max_diff = d[j][0] + d[i][0]
-            if dist < max_diff and not i == j and d[j][5] == d[i][5]:
-                try:
-                    check_intersection(d[j][0], d[j][1], d[j][3], d[j][4], d[j][6], d[i][0], d[i][1], d[i][3], d[i][4],
-                                       d[i][6])
-                    print(np.array([i, j]))
-                    count = count + 1
-                    i = i + 1
-                except RuntimeWarning:
-                    # print('error')
-                    i = i + 1
-                    continue
-            else:
-                i = i + 1
-        j = j + 1
+                    dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                    max_diff = a1 + a2
+                    if dist < max_diff:
+                        try:
+                            check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2)
+                            intersecting_particles += [[particle1, particle2]]
+                        except RuntimeWarning:
+                            continue
 
 
 def layer_render(particles, layer_info, rendering_type="wireframe"):
