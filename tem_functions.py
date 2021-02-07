@@ -10,12 +10,13 @@ from collections import Counter    # dictionary quick maths
 import time                        # measure function execution times
 from scipy.optimize import fsolve  # used for solving system of nonlin eqs. (particle intersections)
 import warnings                    # (particle intersections)
+warnings.filterwarnings("ignore", category=RuntimeWarning) # (particle intersections)
 
 ### constants
 # nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
 # nm_per_pixel = 100 / 95 	
 # nm_per_pixel = 1000 / 131 # In 500nm_epoxy_2.jpg there are 131 pixels per 1 micrometer 
-nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
+# nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 # nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
 # nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
 expected_radius = 100 # in nm
@@ -773,10 +774,11 @@ def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
 
     res = double_solve(eq1, eq2, startx, starty)
 
+    return np.all((abs(eq1(res[0], res[1])) < 0.000001, abs(eq2(res[0], res[1])) < 0.000001), axis=0)
+
 
 def layer_check_intersections(particles):
     """returns the particles that intersect for a given layer"""
-    particle_counter = 0
 
     intersecting_particles = []
 
@@ -807,11 +809,13 @@ def layer_check_intersections(particles):
                     dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
                     max_diff = a1 + a2
                     if dist < max_diff:
-                        try:
-                            check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2)
+                        solve = check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2)
+                        if solve:
                             intersecting_particles += [[particle1, particle2]]
-                        except RuntimeWarning:
+                        else:
                             continue
+
+    return intersecting_particles
 
 
 def layer_render(particles, layer_info, rendering_type="wireframe"):
