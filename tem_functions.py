@@ -309,27 +309,74 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
         
             # find max and min x and y for given agglomerate
             # TODO: make this 100000000x better using numpy
-            max_x = 0
             max_y = 0
-            min_x = 10000000
-            min_y = 10000000
+            min_y = 100000000
             for pixel in agg_contour_colors[agg_particle]:
-                if pixel[0] > max_x:
-                    max_x = pixel[0]
                 if pixel[1] > max_y:
                     max_y = pixel[1]
-                if pixel[0] < min_x:
-                    min_x = pixel[0]
                 if pixel[1] < min_y:
                     min_y = pixel[1]
 
+            y_chunk_size = (max_y - min_y)/5
+
+            chunk_1_max_x = 0
+            chunk_1_min_x = 100000000
+            chunk_2_max_x = 0
+            chunk_2_min_x = 100000000
+            chunk_3_max_x = 0
+            chunk_3_min_x = 100000000
+            chunk_4_max_x = 0
+            chunk_4_min_x = 100000000
+            chunk_5_max_x = 0
+            chunk_5_min_x = 100000000
+
+            for pixel in agg_contour_colors[agg_particle]:
+                if pixel[1] > min_y and pixel[1] < min_y + y_chunk_size:
+                    if pixel[0] > chunk_1_max_x:
+                        chunk_1_max_x = pixel[0]
+                    if pixel[0] < chunk_1_min_x:
+                        chunk_1_min_x = pixel[0]
+                if pixel[1] > min_y + y_chunk_size and pixel[1] < min_y + 2 * y_chunk_size:
+                    if pixel[0] > chunk_2_max_x:
+                        chunk_2_max_x = pixel[0]
+                    if pixel[0] < chunk_2_min_x:
+                        chunk_2_min_x = pixel[0]
+                if pixel[1] > min_y + 2 * y_chunk_size and pixel[1] < min_y + 3 * y_chunk_size:
+                    if pixel[0] > chunk_3_max_x:
+                        chunk_3_max_x = pixel[0]
+                    if pixel[0] < chunk_3_min_x:
+                        chunk_3_min_x = pixel[0]
+                if pixel[1] > min_y + 3 * y_chunk_size and pixel[1] < min_y + 4 * y_chunk_size:
+                    if pixel[0] > chunk_4_max_x:
+                        chunk_4_max_x = pixel[0]
+                    if pixel[0] < chunk_4_min_x:
+                        chunk_4_min_x = pixel[0]
+                if pixel[1] > min_y + 4 * y_chunk_size and pixel[1] < max_y:
+                    if pixel[0] > chunk_5_max_x:
+                        chunk_5_max_x = pixel[0]
+                    if pixel[0] < chunk_5_min_x:
+                        chunk_5_min_x = pixel[0]
+                
             # collect list of particles in particles dictionary that fall within agglomerate
             replacements = []
             for particle in particles:
-                x = particles[particle][0][1]
-                y = particles[particle][1][1]
-                if ((x < max_x) and (x > min_x) and (y < max_y) and (y > min_y)):
-                    replacements += [particle]
+                x = particles[particle][0][1] * 1/nm_per_pixel
+                y = particles[particle][1][1] * 1/nm_per_pixel
+                if y > min_y and y < min_y + y_chunk_size:
+                    if x < chunk_1_max_x and x > chunk_1_min_x:
+                        replacements += [particle]
+                elif y > min_y + y_chunk_size and y < min_y + 2 * y_chunk_size:
+                    if x < chunk_2_max_x and x > chunk_2_min_x:
+                        replacements += [particle]
+                elif y > min_y + 2 * y_chunk_size and y < min_y + 3 * y_chunk_size:
+                    if x < chunk_3_max_x and x > chunk_3_min_x:
+                        replacements += [particle]
+                elif y > min_y + 3 * y_chunk_size and y < min_y + 4 * y_chunk_size:
+                    if x < chunk_4_max_x and x > chunk_4_min_x:
+                        replacements += [particle]
+                elif y > min_y + 4 * y_chunk_size and y < max_y:
+                    if x < chunk_5_max_x and x > chunk_5_min_x:
+                        replacements += [particle]
 
             # add particles to output dictionaries
             for i in range(len(replacements)):
@@ -353,14 +400,13 @@ def pixel_distance(pixel1, pixel2):
 
 
 #TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
-def get_long_chord_lengths(particles, contour_colors):
+def get_long_chord_lengths(particles, potential_replacement_particles, potential_contour_colors, contour_colors):
     """finds the long chord lengths for the contours and returns them as pairs of pixel coordinates"""
-
-    # keep track of maximum chord length found
-    max_chord = 0
 
     # store long pairs as [[color, (start pixel), (end pixel)]]
     long_pairs = []
+    remaining_agglomerates = []
+
     # loop through all colors
     for color in contour_colors:
         # loop through all pixels in a color
@@ -372,15 +418,119 @@ def get_long_chord_lengths(particles, contour_colors):
                 if distance > current_max:
                     current_max = distance
                     long_pair = [color, color_pixels[i], color_pixels[j]]
-        # keep track of long chord length pair for each color 
-        long_pairs += [long_pair]
-        # add to particles dictionary, accounting for nm per pixel
-        particles[color] += [("a", (current_max / 2) * nm_per_pixel)]
-        
-        if current_max > max_chord:
-            max_chord = current_max
 
-    return long_pairs, particles
+        if current_max*nm_per_pixel > 4*expected_radius:
+            remaining_agglomerates += [color]
+    
+        else:
+            # keep track of long chord length pair for each color 
+            long_pairs += [long_pair]
+
+            # add to particles dictionary, accounting for nm per pixel
+            particles[color] += [("a", (current_max / 2) * nm_per_pixel)]
+
+    starting_max_color = np.max(list(particles.keys()))
+
+    for color in remaining_agglomerates:
+        # find max and min x and y for given agglomerate
+        # TODO: make this 100000000x better using numpy
+        max_y = 0
+        min_y = 100000000
+        for pixel in agg_contour_colors[agg_particle]:
+            if pixel[1] > max_y:
+                max_y = pixel[1]
+            if pixel[1] < min_y:
+                min_y = pixel[1]
+
+        y_chunk_size = (max_y - min_y)/5
+
+        chunk_1_max_x = 0
+        chunk_1_min_x = 100000000
+        chunk_2_max_x = 0
+        chunk_2_min_x = 100000000
+        chunk_3_max_x = 0
+        chunk_3_min_x = 100000000
+        chunk_4_max_x = 0
+        chunk_4_min_x = 100000000
+        chunk_5_max_x = 0
+        chunk_5_min_x = 100000000
+
+        for pixel in agg_contour_colors[agg_particle]:
+            if pixel[1] > min_y and pixel[1] < min_y + y_chunk_size:
+                if pixel[0] > chunk_1_max_x:
+                    chunk_1_max_x = pixel[0]
+                if pixel[0] < chunk_1_min_x:
+                    chunk_1_min_x = pixel[0]
+            if pixel[1] > min_y + y_chunk_size and pixel[1] < min_y + 2 * y_chunk_size:
+                if pixel[0] > chunk_2_max_x:
+                    chunk_2_max_x = pixel[0]
+                if pixel[0] < chunk_2_min_x:
+                    chunk_2_min_x = pixel[0]
+            if pixel[1] > min_y + 2 * y_chunk_size and pixel[1] < min_y + 3 * y_chunk_size:
+                if pixel[0] > chunk_3_max_x:
+                    chunk_3_max_x = pixel[0]
+                if pixel[0] < chunk_3_min_x:
+                    chunk_3_min_x = pixel[0]
+            if pixel[1] > min_y + 3 * y_chunk_size and pixel[1] < min_y + 4 * y_chunk_size:
+                if pixel[0] > chunk_4_max_x:
+                    chunk_4_max_x = pixel[0]
+                if pixel[0] < chunk_4_min_x:
+                    chunk_4_min_x = pixel[0]
+            if pixel[1] > min_y + 4 * y_chunk_size and pixel[1] < max_y:
+                if pixel[0] > chunk_5_max_x:
+                    chunk_5_max_x = pixel[0]
+                if pixel[0] < chunk_5_min_x:
+                    chunk_5_min_x = pixel[0]
+
+        # collect list of particles in potential_replacement_particles dictionary that fall within agglomerate
+        replacements = []
+        for particle in potential_replacement_particles:
+            x = potential_replacement_particles[particle][0][1] * 1/nm_per_pixel
+            y = potential_replacement_particles[particle][1][1] * 1/nm_per_pixel
+            if y > min_y and y < min_y + y_chunk_size:
+                if x < chunk_1_max_x and x > chunk_1_min_x:
+                    replacements += [particle]
+            elif y > min_y + y_chunk_size and y < min_y + 2 * y_chunk_size:
+                if x < chunk_2_max_x and x > chunk_2_min_x:
+                    replacements += [particle]
+            elif y > min_y + 2 * y_chunk_size and y < min_y + 3 * y_chunk_size:
+                if x < chunk_3_max_x and x > chunk_3_min_x:
+                    replacements += [particle]
+            elif y > min_y + 3 * y_chunk_size and y < min_y + 4 * y_chunk_size:
+                if x < chunk_4_max_x and x > chunk_4_min_x:
+                    replacements += [particle]
+            elif y > min_y + 4 * y_chunk_size and y < max_y:
+                if x < chunk_5_max_x and x > chunk_5_min_x:
+                    replacements += [particle]
+
+        max_color = np.max(list(particles.keys()))
+
+        # add particles to output dictionaries
+        for i in range(len(replacements)):
+            particles[max_color+i] = potential_replacement_particles[replacements[i]]
+            contour_colors[max_color+i] = potential_contour_colors[replacements[i]]
+
+    # loop through all colors
+    for color in contour_colors:
+        if color > starting_max_color:
+            # loop through all pixels in a color
+            color_pixels = contour_colors[color]
+            current_max = 0
+            for i in range(len(color_pixels)):
+                for j in range(len(color_pixels[i:])):
+                    distance = pixel_distance(color_pixels[i], color_pixels[j])
+                    if distance > current_max:
+                        current_max = distance
+                        long_pair = [color, color_pixels[i], color_pixels[j]]
+
+            # keep track of long chord length pair for each color 
+            long_pairs += [long_pair]
+            print(long_pair)
+
+            # add to particles dictionary, accounting for nm per pixel
+            particles[color] += [("a", (current_max / 2) * nm_per_pixel)]
+
+    return long_pairs, particles, contour_colors
 
 
 def get_short_chord_lengths(particles, contour_colors, long_pairs):
@@ -405,8 +555,15 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs):
         y1 = pair[1][1]
         x2 = pair[2][0]
         y2 = pair[2][1]
+        
+        #deal with edge case where x1 and x2 are the same
+        if x2-x1 == 0:
+            denominator = 0.01
+        else:
+            denominator = x2-x1
+
         # calculate slope as rise over run
-        slope = (y2-y1) / (x2-x1)
+        slope = (y2-y1) / denominator
         # calculate orthogonal slope
         orthogonal_slope = -1 / slope
         # check which pixel start, which is end and calculate midpoint accordingly 
@@ -418,9 +575,9 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs):
             mid_y = y2 + int((y1-y2) / 2)
             # calculate rotation in X-Y plane with long length's slope
             if x1 > x2:
-                theta = 360 - np.arctan((y1-y2)/(x1-x2))*(180/np.pi)
+                theta = 360 - np.arctan((y1-y2)/denominator)*(180/np.pi)
             else:
-                theta = 180 + np.arctan((y1-y2)/(x2-x1))*(180/np.pi)
+                theta = 180 + np.arctan((y1-y2)/denominator)*(180/np.pi)
         else:
             mid_y = y1 + int((y2-y1) / 2)
             # calculate rotation in X-Y plane with long length's slope
@@ -915,7 +1072,7 @@ def pipeline(image_names, thresholds, output_file, debug=False):
             merge_particles, merge_contour_colors = match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas)
 
             # long and short chord lengths
-            long_pairs, merge_particles = get_long_chord_lengths(merge_particles, merge_contour_colors)
+            long_pairs, merge_particles, contour_colors = get_long_chord_lengths(merge_particles, particles, contour_colors, merge_contour_colors)
             short_pairs, merge_particles = get_short_chord_lengths(merge_particles, merge_contour_colors, long_pairs)
 
             # calculate c radii for merged particles
