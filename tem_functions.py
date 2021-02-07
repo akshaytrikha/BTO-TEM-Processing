@@ -15,9 +15,9 @@ import warnings                    # (particle intersections)
 # nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
 # nm_per_pixel = 100 / 95 	
 # nm_per_pixel = 1000 / 131 # In 500nm_epoxy_2.jpg there are 131 pixels per 1 micrometer 
-# nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
+nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 # nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
-nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
+# nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
 expected_radius = 100 # in nm
 
 
