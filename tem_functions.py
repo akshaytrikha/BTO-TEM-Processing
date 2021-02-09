@@ -85,12 +85,8 @@ def get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_
     return watershed_markers
 
 
-def get_areas(watershed_markers):
-    """get the areas of the particles"""
-
-    # dictionary mapping colors to their areas
-    particle_areas = {}
-
+@njit
+def get_areas_helper(watershed_markers, particle_areas):
     # loop through pixels in watershed markers and count the number of pixels for each color
     for row in range(1, len(watershed_markers) - 1):
         for col in range(1, len(watershed_markers[0]) - 1):
@@ -100,18 +96,32 @@ def get_areas(watershed_markers):
                 current = watershed_markers[row][col]
                 # add current pixel to dictionary
                 if current not in particle_areas:
-                    particle_areas[current] = 1
+                    particle_areas[current] = 1.0
                 else:
-                    particle_areas[current] += 1
-
+                    particle_areas[current] += 1.0
+    
     # remove -1 key from particle_areas because it represents contours drawn by cv.watershed()
     if -1 in particle_areas:
         del particle_areas[-1]
-
+        
     # loop to adjust areas from number of pixels to nm^2
     for particle in particle_areas:
         current_area = particle_areas[particle] * nm_per_pixel**2
         particle_areas[particle] = current_area
+                    
+    return particle_areas
+
+
+def get_areas(watershed_markers):
+    """get the areas of the particles"""
+
+    # dictionary mapping colors to their areas
+    particle_areas = Dict.empty(
+        key_type=types.int64, # don't need int64 but compiler throws warnings otherwise
+        value_type=types.float64
+    )
+
+    particle_areas = get_areas_helper(watershed_markers, particle_areas)
 
     return particle_areas
 
