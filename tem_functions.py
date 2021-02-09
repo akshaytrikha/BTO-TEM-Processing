@@ -2,12 +2,14 @@
 # Akshay Trikha, Katie Partington
 # 4th November, 2020
 
-import cv2 as cv                        # OpenCV for image processing
-import matplotlib.pyplot as plt         # Matplotlib for visualizing
-import numpy as np                      # NumPy for quick maths
-from collections import Counter         # dictionary quick maths
-import time                             # measure function execution times
-from visuals import *                   # visuals.py contains visualization functions
+import cv2 as cv                            # OpenCV for image processing
+import matplotlib.pyplot as plt             # Matplotlib for visualizing
+import numpy as np                          # NumPy for quick maths
+from collections import Counter             # dictionary quick maths
+import time                                 # measure function execution times
+from numba import jit, njit, types, typeof  # optimization library
+from numba.typed import Dict, List          # optimized data structures
+from visuals import *                       # visuals.py contains visualization functions
 
 ### constants
 # nm_per_pixel = 100 / 95 	
@@ -114,6 +116,34 @@ def get_areas(watershed_markers):
     return particle_areas
 
 
+@njit
+def get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh):
+    # loop through pixels in watershed markers
+    for row in range(1, len(watershed_markers) - 1):
+        for col in range(1, len(watershed_markers[0]) - 1):
+            # if pixel not in background
+            if watershed_markers[row][col] != 1:
+                # get current pixel and its neighbours 
+                current = types.int64(watershed_markers[row][col])
+                # add current pixel to dictionary
+                if current not in particle_colors:
+                    particle_colors[current] = types.int64(1)
+                else:
+                    particle_colors[current] += types.int64(1)
+
+    # remove -1 key from particle_colors because it represents bad contours drawn by cv.watershed()
+    if -1 in particle_colors:
+        del particle_colors[-1]
+
+    # loop to adjust areas from number of pixels to nm^2
+    max_radius = 0.0
+    for particle in particle_colors:
+        current_area = particle_colors[particle] * nm_per_pixel**2  # don't need to square number of pixels because they already represent an area
+        if (current_area/np.pi)**0.5 > max_radius:
+            max_radius = (current_area/np.pi)**0.5
+    return max_radius
+
+
 # TODO: differentiate parameters and variable names
 def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
     """outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
@@ -124,34 +154,12 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
         watershed_markers = get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, 0)
         
         # dictionary mapping colors to their pixels
-        particle_colors = {}
+        particle_colors = Dict.empty(
+            key_type=types.int64,
+            value_type=types.int64
+        )
 
-        # loop through pixels in watershed markers
-        for row in range(1, len(watershed_markers) - 1):
-            for col in range(1, len(watershed_markers[0]) - 1):
-                # if pixel not in background
-                if watershed_markers[row][col] != 1:
-                    # get current pixel and its neighbours 
-                    current = watershed_markers[row][col]
-                    # add current pixel to dictionary
-                    if current not in particle_colors:
-                        particle_colors[current] = 1
-                    else:
-                        particle_colors[current] += 1
-
-        # remove -1 key from particle_colors because it represents bad contours drawn by cv.watershed()
-        if -1 in particle_colors:
-            del particle_colors[-1]
-
-        # loop to adjust areas from number of pixels to nm^2
-        max_radius = 0
-        for particle in particle_colors:
-            current_area = particle_colors[particle] * nm_per_pixel**2  # don't need to square number of pixels because they already represent an area
-            particle_colors[particle] = [current_area, (current_area/np.pi)**0.5] # store [actual area, estimated radius]
-            if (current_area/np.pi)**0.5 > max_radius:
-                max_radius = (current_area/np.pi)**0.5
-                
-        # print(dist_transform_thresh, max_radius)
+        max_radius = get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh)
                 
         dist_transform_thresh += 0.05
 
@@ -282,7 +290,7 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
             # TODO: make this 100000000x better using numpy
             max_y = 0
             min_y = 100000000
-            for pixel in agg_contour_colors[agg_particle]:
+            for pixel in agg_contour_colors[agg_particle]:      # TODO: fix
                 if pixel[1] > max_y:
                     max_y = pixel[1]
                 if pixel[1] < min_y:
@@ -900,6 +908,7 @@ def pipeline(image_names, thresholds, output_file, debug=False):
     end_pipe = time.perf_counter()
 
     print("\npipeline ran succesfully in", str(end_pipe - start_pipe) + "s")
+
 
 # run pipeline as script for given image(s) and thresholds
 def main():
