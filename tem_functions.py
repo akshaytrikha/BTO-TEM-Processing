@@ -1,24 +1,24 @@
-# functions used in tem.ipynb
+# functions used in TEM-pipeline.ipynb
 # Akshay Trikha, Katie Partington
 # 4th November, 2020
 
-import cv2 as cv                   # OpenCV for image processing
-import matplotlib.pyplot as plt    # Matplotlib for visualizing
+import cv2 as cv                        # OpenCV for image processing
+import matplotlib.pyplot as plt         # Matplotlib for visualizing
 from mpl_toolkits.mplot3d import Axes3D # Axes3D for 3D visualization
-import numpy as np                 # NumPy for quick maths
-from collections import Counter    # dictionary quick maths
-import time                        # measure function execution times
-from scipy.optimize import fsolve  # used for solving system of nonlin eqs. (particle intersections)
-import warnings                    # (particle intersections)
+import numpy as np                      # NumPy for quick maths
+from collections import Counter         # dictionary quick maths
+import time                             # measure function execution times
+from scipy.optimize import fsolve       # used for solving system of nonlin eqs. (particle intersections)
+import warnings                         # (particle intersections)
 warnings.filterwarnings("ignore", category=RuntimeWarning) # (particle intersections)
 
 ### constants
-# nm_per_pixel = 100 / 46   # In Challenge_1.jpg there are 92 pixels per 200nm = 46 pixels per 100 nm
 # nm_per_pixel = 100 / 95 	
 # nm_per_pixel = 1000 / 131 # In 500nm_epoxy_2.jpg there are 131 pixels per 1 micrometer 
-# nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
-# nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
+nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 # nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
+# nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
+
 expected_radius = 100 # in nm
 
 
@@ -33,8 +33,6 @@ def display_images(images, titles, grayscales):
 
         # loop through images and display
         for i in range(len(images)):
-            # axs[i].imshow(images[i], cmap=plt.cm.gray)
-            # axs[i].set_title(titles[i])
             if grayscales[i]:
                 axs[i].imshow(images[i], cmap=plt.cm.gray)
                 axs[i].set_title(titles[i])
