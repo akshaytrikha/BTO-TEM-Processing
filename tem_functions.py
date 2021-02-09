@@ -166,15 +166,8 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
     return dist_transform_thresh - 0.05 # TODO this seems bad
 
 
-# TODO: just loop through the output of watershed markers, where the border pixel are already marked with -1 and see what pixels they neighbor
-def get_contour_colors(watershed_markers, color_image):
-    """returns dictionary mapping colors to their pixels"""
-    # copy input image
-    chords_color_copy = color_image.copy() 
-
-    # output
-    contour_colors = {}
-
+@njit
+def get_contour_colors_helper(contour_colors, watershed_markers,chords_color_copy):
     contour_size = 0
     # loop through pixels in watershed markers
     for row in range(1, len(watershed_markers) - 1):		# TODO: don't ignore border particles
@@ -193,16 +186,16 @@ def get_contour_colors(watershed_markers, color_image):
                     if (right != current):
                         # add current pixel to dictionary
                         if current not in contour_colors:
-                            contour_colors[current] = [(col, row)]	# pixels are appended as (col, row) in order to feed to cv.lines() later on
+                            contour_colors[current] = List([List([col,row])])	# pixels are appended as (col, row) in order to feed to cv.lines() later on
                         else:
-                            contour_colors[current] += [(col,row)]
+                            contour_colors[current].append(List([col,row]))
                         
                         # if the right pixel is not in background, add it to the dictionary
                         if (right != 1):
                             if right not in contour_colors:
-                                contour_colors[right] = [(col+1, row)]
+                                contour_colors[right] = List([List([col+1,row])])
                             else:
-                                contour_colors[right] += [(col+1,row)]
+                                contour_colors[right].append(List([col+1,row]))
                             chords_color_copy[row][col+1] = [255, 0, 0]
                             contour_size += 1
                             
@@ -213,16 +206,16 @@ def get_contour_colors(watershed_markers, color_image):
                     elif (down != current):
                         # add current pixel to dictionary
                         if current not in contour_colors:
-                            contour_colors[current] = [(col, row)]
+                            contour_colors[current] = List([List([col,row])])
                         else:
-                            contour_colors[current] += [(col,row)]
+                            contour_colors[current].append(List([col,row]))
                         
                         # if the down pixel is not in background, add it to the dictionary
                         if (down != 1):
                             if down not in contour_colors:
-                                contour_colors[down] = [(col, row+1)]
+                                contour_colors[down] = List([List([col,row+1])])
                             else:
-                                contour_colors[down] += [(col,row+1)]
+                                contour_colors[down].append(List([col,row+1]))
                             chords_color_copy[row+1][col] = [255, 0, 0]
                             contour_size += 1
                             
@@ -233,12 +226,28 @@ def get_contour_colors(watershed_markers, color_image):
                     elif (((up != 255) and (up != current)) or ((left != 255) and (left != current))):
                         # add current pixel to dictionary
                         if current not in contour_colors:
-                            contour_colors[current] = [(col, row)]
+                            contour_colors[current] = List([List([col,row])])
                         else:
-                            contour_colors[current] += [(col,row)]
+                            contour_colors[current].append(List([col,row]))
                             
                         chords_color_copy[row][col] = [255, 0, 0]                    
                         contour_size += 1
+    return contour_colors, chords_color_copy
+
+
+# TODO: just loop through the output of watershed markers, where the border pixel are already marked with -1 and see what pixels they neighbor
+def get_contour_colors(watershed_markers, color_image):
+    """returns dictionary mapping colors to their pixels"""
+    # copy input image
+    chords_color_copy = color_image.copy() 
+
+    # output
+    contour_colors = Dict.empty(
+        key_type=types.int64, # don't need int64 but compiler throws warnings otherwise
+        value_type=types.ListType(types.ListType(types.int64))
+    )
+
+    contour_colors, chords_color_copy = get_contour_colors_helper(contour_colors, watershed_markers, chords_color_copy)
 
     # remove -1 key from contour_colors because it represents contours drawn by cv.watershed()
     if -1 in contour_colors:
@@ -371,7 +380,8 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
         
     return out_particles, out_contour_colors
 
-    
+
+@njit
 def pixel_distance(pixel1, pixel2):
     """finds the distance between two pixel tuples"""
     return np.power(np.power(pixel1[0] - pixel2[0], 2) + np.power(pixel1[1] - pixel2[1], 2), 0.5)
