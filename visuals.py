@@ -1,12 +1,11 @@
 # visualizations used in TEM-pipeline.ipynb
-# Gio Ferro
+# Gio Ferro, Katie Partington, Akshay Trikha
 # 1st January, 2021
 
+import cv2 as cv                        # OpenCV for image processing
 import matplotlib.pyplot as plt         # Matplotlib for visualizing
 from mpl_toolkits.mplot3d import Axes3D # Axes3D for 3D visualization
-from scipy.optimize import fsolve       # used for solving system of nonlin eqs. (particle intersections)
-import warnings                         # (particle intersections)
-warnings.filterwarnings("ignore", category=RuntimeWarning) # (particle intersections)
+import numpy as np                      # NumPy for quick maths
 
 
 def display_images(images, titles, grayscales):
@@ -33,85 +32,19 @@ def save_images(images, titles):
     for i in range(len(images)):
         plt.savefig(str(images[i]) + "_" + titles[i] + ".png", dpi=500)
 
+
 def draw_long_lengths(image, long_pairs):
     """draws long chord lengths on an image"""
     for long_pair in long_pairs:
-        cv.line(image, long_pair[1], long_pair[2], [255,255,0])
-
+        # cv.line(image, long_pair[1], long_pair[2], [255,255,0])
+        cv.line(image, (long_pair[1][0], long_pair[1][1]), (long_pair[2][0], long_pair[2][1]), [255,255,0])
+        
 
 def draw_short_lengths(image, short_pairs):
     """draws short chord lengths on an image"""
     for short_pair in short_pairs:
-        cv.line(image, short_pair[0], short_pair[1], [0,255,255])
-
-
-def double_solve(f1, f2, x0, y0):
-    """solves the system of equations"""
-    func = lambda x: [f1(x[0], x[1]), f2(x[0], x[1])]
-    return fsolve(func, [x0, y0])
-
-
-def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
-    """checks for intersections between two particles"""
-    phi1 = theta1 * np.pi / 180
-    phi2 = theta2 * np.pi / 180
-
-    test1 = lambda x, y: x ** 2 + 1 - y
-    test2 = lambda x, y: y - 3
-    res_test = double_solve(test1, test2, 1, 0)
-
-
-    eq1 = lambda x, y: ((x - cx1) * np.cos(phi1) + (y - cy1) * np.sin(phi1)) ** 2 / a1 ** 2 + (
-            (x - cx1) * np.sin(phi1) - (y - cy1) * np.cos(phi1)) ** 2 / b1 ** 2 - 1
-    eq2 = lambda x, y: ((x - cx2) * np.cos(phi2) + (y - cy2) * np.sin(phi2)) ** 2 / a2 ** 2 + (
-            (x - cx2) * np.sin(phi2) - (y - cy2) * np.cos(phi2)) ** 2 / b2 ** 2 - 1
-    startx = min(cx1, cx2) + abs(cx1 - cx2) / 2
-    starty = min(cy1, cy2) + abs(cy1 - cy2) / 2
-
-    res = double_solve(eq1, eq2, startx, starty)
-
-    return np.all((abs(eq1(res[0], res[1])) < 0.000001, abs(eq2(res[0], res[1])) < 0.000001), axis=0)
-
-
-def layer_check_intersections(particles):
-    """returns the particles that intersect for a given layer"""
-
-    intersecting_particles = []
-
-    for particle1 in particles:
-        particle_counter = particle1
-        for particle2 in particles:
-            if particle2 > particle_counter:
-                # get particle data
-                particle_data1 = particles[particle1]
-                particle_data2 = particles[particle2]
-                # if the particle has an x and y position, a, b, and c radii, and an angle
-                if len(particle_data1) == 6 and len(particle_data2) == 6:
-                    # extract particle info
-                    x1 = particle_data1[0][1]
-                    y1 = particle_data1[1][1]
-                    a1 = particle_data1[2][1]
-                    b1 = particle_data1[4][1]
-                    c1 = particle_data1[5][1]
-                    theta1 = particle_data1[3][1]
-
-                    x2 = particle_data2[0][1]
-                    y2 = particle_data2[1][1]
-                    a2 = particle_data2[2][1]
-                    b2 = particle_data2[4][1]
-                    c2 = particle_data2[5][1]
-                    theta2 = particle_data2[3][1]
-
-                    dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-                    max_diff = a1 + a2
-                    if dist < max_diff:
-                        solve = check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2)
-                        if solve:
-                            intersecting_particles += [[particle1, particle2]]
-                        else:
-                            continue
-
-    return intersecting_particles
+        # cv.line(image, short_pair[0], short_pair[1], [0,255,255])
+        cv.line(image, (short_pair[0][0], short_pair[0][1]), (short_pair[1][0], short_pair[1][1]), [0,255,255])
 
 
 def layer_render(particles, layer_info, rendering_type="wireframe"):

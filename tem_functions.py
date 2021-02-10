@@ -10,6 +10,9 @@ from numba import jit, njit, types, typeof  # optimization library
 from numba.typed import Dict, List          # optimized data structures
 from visuals import *                       # visuals.py contains visualization functions
 from main import *                          # main.py contains global constants
+from scipy.optimize import fsolve       # used for solving system of nonlin eqs. (particle intersections)
+import warnings                         # (particle intersections)
+warnings.filterwarnings("ignore", category=RuntimeWarning) # (particle intersections)
 
 
 def get_threshold(threshold):
@@ -74,47 +77,6 @@ def get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_
         display_images([pre_watershed_markers, watershed_markers], ["Pre-Watershed Markers", "Watershed Markers"], [0,0])
 
     return watershed_markers
-
-
-@njit
-def get_areas_helper(watershed_markers, particle_areas):
-    # loop through pixels in watershed markers and count the number of pixels for each color
-    for row in range(1, len(watershed_markers) - 1):
-        for col in range(1, len(watershed_markers[0]) - 1):
-            # if pixel not in background
-            if watershed_markers[row][col] != 1:
-                # get current pixel and its neighbours 
-                current = watershed_markers[row][col]
-                # add current pixel to dictionary
-                if current not in particle_areas:
-                    particle_areas[current] = 1.0
-                else:
-                    particle_areas[current] += 1.0
-    
-    # remove -1 key from particle_areas because it represents contours drawn by cv.watershed()
-    if -1 in particle_areas:
-        del particle_areas[-1]
-        
-    # loop to adjust areas from number of pixels to nm^2
-    for particle in particle_areas:
-        current_area = particle_areas[particle] * nm_per_pixel**2
-        particle_areas[particle] = current_area
-                    
-    return particle_areas
-
-
-def get_areas(watershed_markers):
-    """get the areas of the particles"""
-
-    # dictionary mapping colors to their areas
-    particle_areas = Dict.empty(
-        key_type=types.int64, # don't need int64 but compiler throws warnings otherwise
-        value_type=types.float64
-    )
-
-    particle_areas = get_areas_helper(watershed_markers, particle_areas)
-
-    return particle_areas
 
 
 @njit
@@ -283,6 +245,47 @@ def find_centerpoints(contour_colors):
     return particles
 
 
+@njit
+def get_areas_helper(watershed_markers, particle_areas):
+    # loop through pixels in watershed markers and count the number of pixels for each color
+    for row in range(1, len(watershed_markers) - 1):
+        for col in range(1, len(watershed_markers[0]) - 1):
+            # if pixel not in background
+            if watershed_markers[row][col] != 1:
+                # get current pixel and its neighbours 
+                current = watershed_markers[row][col]
+                # add current pixel to dictionary
+                if current not in particle_areas:
+                    particle_areas[current] = 1.0
+                else:
+                    particle_areas[current] += 1.0
+    
+    # remove -1 key from particle_areas because it represents contours drawn by cv.watershed()
+    if -1 in particle_areas:
+        del particle_areas[-1]
+        
+    # loop to adjust areas from number of pixels to nm^2
+    for particle in particle_areas:
+        current_area = particle_areas[particle] * nm_per_pixel**2
+        particle_areas[particle] = current_area
+                    
+    return particle_areas
+
+
+def get_areas(watershed_markers):
+    """get the areas of the particles"""
+
+    # dictionary mapping colors to their areas
+    particle_areas = Dict.empty(
+        key_type=types.int64, # don't need int64 but compiler throws warnings otherwise
+        value_type=types.float64
+    )
+
+    particle_areas = get_areas_helper(watershed_markers, particle_areas)
+
+    return particle_areas
+
+
 def get_replacements(agg_contour, potential_replacement_particles):
     """takes the contour of an agglomerate and returns a list of replacement particles"""
     max_y = 0
@@ -374,9 +377,9 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
             replacements = get_replacements(agg_contour, particles)
 
             # add particles to output dictionaries
-            for i in range(1, len(replacements)+1):
-                out_particles[max_color+i] = particles[replacements[i]]
-                out_contour_colors[max_color+i] = contour_colors[replacements[i]]
+            for i in range(len(replacements)):
+                out_particles[max_color+1+i] = particles[replacements[i]]
+                out_contour_colors[max_color+1+i] = contour_colors[replacements[i]]
 
             # if no replacement particles are found, add the particle to the end of each dictionary
             if replacements == []:
@@ -448,9 +451,9 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
         max_color = np.max(list(particles.keys()))
 
         # add replacement particles to output dictionaries
-        for i in range(1, len(replacements)+1):
-            particles[max_color+i] = potential_replacement_particles[replacements[i]]
-            contour_colors[max_color+i] = potential_contour_colors[replacements[i]]
+        for i in range(len(replacements)):
+            particles[max_color+1+i] = potential_replacement_particles[replacements[i]]
+            contour_colors[max_color+1+i] = potential_contour_colors[replacements[i]]
 
         # if no replacement particles are found, add the particle to the end of each dictionary
         if replacements == []:
@@ -681,6 +684,75 @@ def get_layer_info(particles):
     volume_fraction = layer_volume/(x_length*y_length*max_c*2)
 
     return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
+
+
+def double_solve(f1, f2, x0, y0):
+    """solves the system of equations"""
+    func = lambda x: [f1(x[0], x[1]), f2(x[0], x[1])]
+    return fsolve(func, [x0, y0])
+
+
+def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
+    """checks for intersections between two particles"""
+    phi1 = theta1 * np.pi / 180
+    phi2 = theta2 * np.pi / 180
+
+    test1 = lambda x, y: x ** 2 + 1 - y
+    test2 = lambda x, y: y - 3
+    res_test = double_solve(test1, test2, 1, 0)
+
+
+    eq1 = lambda x, y: ((x - cx1) * np.cos(phi1) + (y - cy1) * np.sin(phi1)) ** 2 / a1 ** 2 + (
+            (x - cx1) * np.sin(phi1) - (y - cy1) * np.cos(phi1)) ** 2 / b1 ** 2 - 1
+    eq2 = lambda x, y: ((x - cx2) * np.cos(phi2) + (y - cy2) * np.sin(phi2)) ** 2 / a2 ** 2 + (
+            (x - cx2) * np.sin(phi2) - (y - cy2) * np.cos(phi2)) ** 2 / b2 ** 2 - 1
+    startx = min(cx1, cx2) + abs(cx1 - cx2) / 2
+    starty = min(cy1, cy2) + abs(cy1 - cy2) / 2
+
+    res = double_solve(eq1, eq2, startx, starty)
+
+    return np.all((abs(eq1(res[0], res[1])) < 0.000001, abs(eq2(res[0], res[1])) < 0.000001), axis=0)
+
+
+def layer_check_intersections(particles):
+    """returns the particles that intersect for a given layer"""
+
+    intersecting_particles = []
+
+    for particle1 in particles:
+        particle_counter = particle1
+        for particle2 in particles:
+            if particle2 > particle_counter:
+                # get particle data
+                particle_data1 = particles[particle1]
+                particle_data2 = particles[particle2]
+                # if the particle has an x and y position, a, b, and c radii, and an angle
+                if len(particle_data1) == 6 and len(particle_data2) == 6:
+                    # extract particle info
+                    x1 = particle_data1[0][1]
+                    y1 = particle_data1[1][1]
+                    a1 = particle_data1[2][1]
+                    b1 = particle_data1[4][1]
+                    c1 = particle_data1[5][1]
+                    theta1 = particle_data1[3][1]
+
+                    x2 = particle_data2[0][1]
+                    y2 = particle_data2[1][1]
+                    a2 = particle_data2[2][1]
+                    b2 = particle_data2[4][1]
+                    c2 = particle_data2[5][1]
+                    theta2 = particle_data2[3][1]
+
+                    dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                    max_diff = a1 + a2
+                    if dist < max_diff:
+                        solve = check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2)
+                        if solve:
+                            intersecting_particles += [[particle1, particle2]]
+                        else:
+                            continue
+
+    return intersecting_particles
 
 
 def combine_layers(particle_layers, layer_infos, filename):
