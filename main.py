@@ -64,7 +64,7 @@ def pipeline(image_names, thresholds, output_file, debug=False):
 
         # long and short chord lengths
         start = time.perf_counter()
-        long_pairs_1, merge_particles_1 = get_long_chord_lengths(merge_particles_1, merge_contour_colors_1)
+        long_pairs_1, merge_particles_1, merge_contour_colors_1 = get_long_chord_lengths(merge_particles_1, particles_1, contour_colors_1, merge_contour_colors_1)
         end = time.perf_counter()
         print("get_long_chord_lengths() ran in", str(end - start) + "s")
         start = time.perf_counter()

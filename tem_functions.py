@@ -11,6 +11,7 @@ from numba.typed import Dict, List          # optimized data structures
 from visuals import *                       # visuals.py contains visualization functions
 from main import *                          # main.py contains global constants
 
+
 def get_threshold(threshold):
     """TODO: returns automatic thresholding of grayscale image"""
     return threshold
