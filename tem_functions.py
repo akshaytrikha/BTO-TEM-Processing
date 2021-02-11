@@ -287,76 +287,24 @@ def get_areas(watershed_markers):
 
 
 def get_replacements(agg_contour, potential_replacement_particles):
-    """takes the contour of an agglomerate and returns a list of replacement particles"""
-    max_y = 0
-    min_y = np.inf
-    for pixel in agg_contour:      
-        if pixel[1] > max_y:
-            max_y = pixel[1]
-        if pixel[1] < min_y:
-            min_y = pixel[1]
+    """takes the contour of an agglomerate and returns a list of replacement particle IDs"""
 
-    y_chunk_size = (max_y - min_y)/5
+    # convert agg_contour weird Numba list datatype into ndarray to feed to cv functions
+    agg_contour = np.asarray(agg_contour)
 
-    chunk_1_max_x = 0
-    chunk_1_min_x = np.inf
-    chunk_2_max_x = 0
-    chunk_2_min_x = np.inf
-    chunk_3_max_x = 0
-    chunk_3_min_x = np.inf
-    chunk_4_max_x = 0
-    chunk_4_min_x = np.inf
-    chunk_5_max_x = 0
-    chunk_5_min_x = np.inf
-
-    for pixel in agg_contour:
-        if pixel[1] > min_y and pixel[1] < min_y + y_chunk_size:
-            if pixel[0] > chunk_1_max_x:
-                chunk_1_max_x = pixel[0]
-            if pixel[0] < chunk_1_min_x:
-                chunk_1_min_x = pixel[0]
-        if pixel[1] > min_y + y_chunk_size and pixel[1] < min_y + 2 * y_chunk_size:
-            if pixel[0] > chunk_2_max_x:
-                chunk_2_max_x = pixel[0]
-            if pixel[0] < chunk_2_min_x:
-                chunk_2_min_x = pixel[0]
-        if pixel[1] > min_y + 2 * y_chunk_size and pixel[1] < min_y + 3 * y_chunk_size:
-            if pixel[0] > chunk_3_max_x:
-                chunk_3_max_x = pixel[0]
-            if pixel[0] < chunk_3_min_x:
-                chunk_3_min_x = pixel[0]
-        if pixel[1] > min_y + 3 * y_chunk_size and pixel[1] < min_y + 4 * y_chunk_size:
-            if pixel[0] > chunk_4_max_x:
-                chunk_4_max_x = pixel[0]
-            if pixel[0] < chunk_4_min_x:
-                chunk_4_min_x = pixel[0]
-        if pixel[1] > min_y + 4 * y_chunk_size and pixel[1] < max_y:
-            if pixel[0] > chunk_5_max_x:
-                chunk_5_max_x = pixel[0]
-            if pixel[0] < chunk_5_min_x:
-                chunk_5_min_x = pixel[0]
-        
-    # collect list of particles in particles dictionary that fall within agglomerate
     replacements = []
+
+    # loop through potential replacement particles for agglomerate
     for particle in potential_replacement_particles:
-        x = potential_replacement_particles[particle][0][1] * 1/nm_per_pixel
-        y = potential_replacement_particles[particle][1][1] * 1/nm_per_pixel
-        if y > min_y and y < min_y + y_chunk_size:
-            if x < chunk_1_max_x and x > chunk_1_min_x:
-                replacements += [particle]
-        elif y > min_y + y_chunk_size and y < min_y + 2 * y_chunk_size:
-            if x < chunk_2_max_x and x > chunk_2_min_x:
-                replacements += [particle]
-        elif y > min_y + 2 * y_chunk_size and y < min_y + 3 * y_chunk_size:
-            if x < chunk_3_max_x and x > chunk_3_min_x:
-                replacements += [particle]
-        elif y > min_y + 3 * y_chunk_size and y < min_y + 4 * y_chunk_size:
-            if x < chunk_4_max_x and x > chunk_4_min_x:
-                replacements += [particle]
-        elif y > min_y + 4 * y_chunk_size and y < max_y:
-            if x < chunk_5_max_x and x > chunk_5_min_x:
-                replacements += [particle]
-            
+        
+        # TODO replace potential_replacement_particles variable name, too long
+        center = (int(potential_replacement_particles[particle][0][1] * 1/nm_per_pixel), int(potential_replacement_particles[particle][1][1] * 1/nm_per_pixel))
+        
+        # check if their centerpoints lie within the agglomerate's contour
+        draw_point_contour(center, agg_contour)
+        if cv.pointPolygonTest(agg_contour, center, False) == 0.0:  # pointPolygonTest returns 0.0 if pixel in or on contour, -1.0 otherwise
+            replacements += [particle]
+
     return replacements
 
 
@@ -369,8 +317,8 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
     # loop through agglomerate particles
     for agg_particle in agg_particles:
 
-        # if particle has a radius more than twice expected size
-        if agg_areas[agg_particle] > np.pi*(expected_radius*2)**2:
+        # if particle has an area more than four times expected size
+        if agg_areas[agg_particle] > np.pi * np.power((expected_radius*2), 2):
             # then particle is agglomerate
 
             agg_contour = agg_contour_colors[agg_particle]

@@ -33,6 +33,21 @@ def save_images(images, titles):
         plt.savefig(str(images[i]) + "_" + titles[i] + ".png", dpi=500)
 
 
+def draw_point_contour(point, contour):
+    """takes in a point and a contour and returns true if point is within contour and false otherwise"""
+    # load new images
+    color = cv.imread("./inputs/TES-36b-cropped.tif")
+    gray = cv.cvtColor(color, cv.COLOR_BGR2GRAY)
+    
+    cv.drawContours(color, [contour], -1, (100, 255, 100), 2)
+    color = cv.circle(color, point, 15, (255, 100, 100), 15)
+    if cv.pointPolygonTest(contour, point, False) == 0.0:
+        return True
+    else:
+        return False
+    plt.imshow(color);
+
+
 def draw_long_lengths(image, long_pairs):
     """draws long chord lengths on an image"""
     for long_pair in long_pairs:
