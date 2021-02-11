@@ -312,7 +312,7 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
     """Replaces agglomerates with particles and outputs a single dictionary"""
     out_contour_colors = {}
     out_particles = {}
-    max_color = np.max(list(agg_particles.keys()))
+    max_id = np.max(list(agg_particles.keys()))
 
     # loop through agglomerate particles
     for agg_particle in agg_particles:
@@ -326,18 +326,17 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
 
             # add particles to output dictionaries
             for i in range(len(replacements)):
-                out_particles[max_color+1+i] = particles[replacements[i]]
-                out_contour_colors[max_color+1+i] = contour_colors[replacements[i]]
+                out_particles[max_id+1+i] = particles[replacements[i]]
+                out_contour_colors[max_id+1+i] = contour_colors[replacements[i]]
 
             # if no replacement particles are found, add the particle to the end of each dictionary
             if replacements == []:
-                out_particles[max_color + 1] = agg_particles[agg_particle]
-                out_contour_colors[max_color + 1] = agg_contour_colors[agg_particle]
-                # update max_color
-                max_color += 1
+                out_particles[max_id + 1] = agg_particles[agg_particle]
+                out_contour_colors[max_id + 1] = agg_contour_colors[agg_particle]
+                max_id += 1
             else:
-                # update max color
-                max_color += len(replacements)
+                # update max id
+                max_id += len(replacements)
         
         else:
             out_particles[agg_particle] = agg_particles[agg_particle]
@@ -352,6 +351,22 @@ def pixel_distance(pixel1, pixel2):
     return np.power(np.power(pixel1[0] - pixel2[0], 2) + np.power(pixel1[1] - pixel2[1], 2), 0.5)
 
 
+@njit
+def get_long_chord_lengths_helper(color_pixels, long_pair_pixels):
+    cur_max_len = 0
+    for i in range(len(color_pixels)):
+        for j in range(len(color_pixels[i:])):
+            distance = pixel_distance(color_pixels[i], color_pixels[j])
+            if distance > cur_max_len:
+                cur_max_len = distance
+                long_pair_pixels[0][0] = color_pixels[i][0]    # Numba doesn't support long_pair[0] = color_pixels[i] yet
+                long_pair_pixels[0][1] = color_pixels[i][1]    # have to manually set list indicies
+                long_pair_pixels[1][0] = color_pixels[j][0]
+                long_pair_pixels[1][1] = color_pixels[j][1]
+
+    return long_pair_pixels, cur_max_len
+
+
 #TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
 def get_long_chord_lengths(particles, potential_replacement_particles, potential_contour_colors, contour_colors):
     """finds the long chord lengths for the contours and returns them as pairs of pixel coordinates"""
@@ -364,29 +379,24 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
     for color in contour_colors:
         # loop through all pixels in a color
         color_pixels = contour_colors[color]
-        current_max = 0
-        for i in range(len(color_pixels)):
-            for j in range(len(color_pixels[i:])):
-                distance = pixel_distance(color_pixels[i], color_pixels[j])
-                # adjust the maximum distance if necessary
-                if distance > current_max:
-                    current_max = distance
-                    long_pair = [color, color_pixels[i], color_pixels[j]]
+
+        long_pair_pixels = np.zeros((2,2), dtype=int)
+        long_pair_pixels, cur_max_len = get_long_chord_lengths_helper(color_pixels, long_pair_pixels)
 
         # if the particle has a diamter greater than twice the expected diameter, mark it as an agglomerate
-        if current_max*nm_per_pixel > 4*expected_radius:
+        if cur_max_len * nm_per_pixel > 4 * expected_radius:
             remaining_agglomerates += [color]
         
         # if the particle is not an agglomerate, add its long pairs to the list and add its long length to the dictionary
         else:
             # keep track of long chord length pair for each color 
-            long_pairs += [long_pair]
+            long_pairs += [[color, (long_pair_pixels[0][0], long_pair_pixels[0][1]), (long_pair_pixels[1][0], long_pair_pixels[1][1])]]
 
             # add to particles dictionary, accounting for nm per pixel
-            particles[color] += [("a", (current_max / 2) * nm_per_pixel)]
+            particles[color] += [("a", (cur_max_len / 2) * nm_per_pixel)]
 
     # record the maximum particle ID before breaking up remaining agglomerates
-    starting_max_color = np.max(list(particles.keys()))
+    max_id = np.max(list(particles.keys()))
 
     # loop through remaining agglomerates
     for color in remaining_agglomerates:
@@ -396,37 +406,33 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
         replacements = get_replacements(agg_contour, potential_replacement_particles)
 
         # find the current maximum particle ID
-        max_color = np.max(list(particles.keys()))
-
-        # add replacement particles to output dictionaries
-        for i in range(len(replacements)):
-            particles[max_color+1+i] = potential_replacement_particles[replacements[i]]
-            contour_colors[max_color+1+i] = potential_contour_colors[replacements[i]]
+        cur_max_id = np.max(list(particles.keys()))
 
         # if no replacement particles are found, add the particle to the end of each dictionary
         if replacements == []:
-            particles[max_color + 1] = particles[color]
-            contour_colors[max_color + 1] = contour_colors[color]
+            particles[cur_max_id + 1] = particles[color]
+            contour_colors[cur_max_id + 1] = contour_colors[color]
+        else:
+            # add replacement particles to output dictionaries
+            for i in range(len(replacements)):
+                particles[cur_max_id + 1 + i] = potential_replacement_particles[replacements[i]]
+                contour_colors[cur_max_id + 1 + i] = potential_contour_colors[replacements[i]]
 
     # loop through all colors
     for color in contour_colors:
         # if particle is a replacement for an agglomerate, find its longest length
-        if color > starting_max_color:
+        if color > max_id:
             # loop through all pixels in a color
             color_pixels = contour_colors[color]
-            current_max = 0
-            for i in range(len(color_pixels)):
-                for j in range(len(color_pixels[i:])):
-                    distance = pixel_distance(color_pixels[i], color_pixels[j])
-                    if distance > current_max:
-                        current_max = distance
-                        long_pair = [color, color_pixels[i], color_pixels[j]]
+            
+            long_pair_pixels = np.zeros((2,2), dtype=int)
+            long_pair_pixels, cur_max_len = get_long_chord_lengths_helper(color_pixels, long_pair_pixels)
 
             # keep track of long chord length pair for each color 
-            long_pairs += [long_pair]
+            long_pairs += [[color, (long_pair_pixels[0][0], long_pair_pixels[0][1]), (long_pair_pixels[1][0], long_pair_pixels[1][1])]]
 
             # add to particles dictionary, accounting for nm per pixel
-            particles[color] += [("a", (current_max / 2) * nm_per_pixel)]
+            particles[color] += [("a", (cur_max_len / 2) * nm_per_pixel)]
 
     return long_pairs, particles, contour_colors
 
