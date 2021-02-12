@@ -656,10 +656,8 @@ def check_intersection(a1, b1, cx1, cy1, theta1, a2, b2, cx2, cy2, theta2):
     res_test = double_solve(test1, test2, 1, 0)
 
 
-    eq1 = lambda x, y: ((x - cx1) * np.cos(phi1) + (y - cy1) * np.sin(phi1)) ** 2 / a1 ** 2 + (
-            (x - cx1) * np.sin(phi1) - (y - cy1) * np.cos(phi1)) ** 2 / b1 ** 2 - 1
-    eq2 = lambda x, y: ((x - cx2) * np.cos(phi2) + (y - cy2) * np.sin(phi2)) ** 2 / a2 ** 2 + (
-            (x - cx2) * np.sin(phi2) - (y - cy2) * np.cos(phi2)) ** 2 / b2 ** 2 - 1
+    eq1 = lambda x, y: ((x - cx1) * np.cos(phi1) + (y - cy1) * np.sin(phi1)) ** 2 / a1 ** 2 + ((x - cx1) * np.sin(phi1) - (y - cy1) * np.cos(phi1)) ** 2 / b1 ** 2 - 1
+    eq2 = lambda x, y: ((x - cx2) * np.cos(phi2) + (y - cy2) * np.sin(phi2)) ** 2 / a2 ** 2 + ((x - cx2) * np.sin(phi2) - (y - cy2) * np.cos(phi2)) ** 2 / b2 ** 2 - 1
     startx = min(cx1, cx2) + abs(cx1 - cx2) / 2
     starty = min(cy1, cy2) + abs(cy1 - cy2) / 2
 
@@ -674,9 +672,8 @@ def layer_check_intersections(particles):
     intersecting_particles = []
 
     for particle1 in particles:
-        particle_counter = particle1
         for particle2 in particles:
-            if particle2 > particle_counter:
+            if particle2 > particle1:
                 # get particle data
                 particle_data1 = particles[particle1]
                 particle_data2 = particles[particle2]
@@ -687,14 +684,12 @@ def layer_check_intersections(particles):
                     y1 = particle_data1[1][1]
                     a1 = particle_data1[2][1]
                     b1 = particle_data1[4][1]
-                    c1 = particle_data1[5][1]
                     theta1 = particle_data1[3][1]
 
                     x2 = particle_data2[0][1]
                     y2 = particle_data2[1][1]
                     a2 = particle_data2[2][1]
                     b2 = particle_data2[4][1]
-                    c2 = particle_data2[5][1]
                     theta2 = particle_data2[3][1]
 
                     dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
@@ -708,70 +703,124 @@ def layer_check_intersections(particles):
 
     return intersecting_particles
 
-# TODO: account for the tuples inside of the dictionary
+
 def layer_scale_particles(particles):
     """scales particles to get rid of intersections"""
-    d = particles
-    intersections_found = layer_check_intersections(d)
 
-    while len(intersections_found) > 0:
-        for i in range(len(intersections_found)):
-            particle1 = intersections_found[i][0]
-            particle2 = intersections_found[i][1]
-            d[particle1][2] = d[particle1][2] * 0.98
-            d[particle1][4] = d[particle1][4] * 0.98
-            d[particle2][2] = d[particle2][2] * 0.98
-            d[particle2][4] = d[particle2][4] * 0.98
-        intersections_found = layer_check_intersections(d)
+    intersections_found = layer_check_intersections(particles)
 
-    return d
+    # loop through pairs of intersecting particles
+    for i in range(len(intersections_found)):
+        particle1 = intersections_found[i][0]
+        particle_data1 = particles[particle1]
+        particle2 = intersections_found[i][1]
+        particle_data2 = particles[particle2]
 
-# TODO: account for the tuples inside of the dictionary
+        # extract particle info
+        x1 = particle_data1[0][1]
+        y1 = particle_data1[1][1]
+        a1 = particle_data1[2][1]
+        b1 = particle_data1[4][1]
+        theta1 = particle_data1[3][1]
+
+        x2 = particle_data2[0][1]
+        y2 = particle_data2[1][1]
+        a2 = particle_data2[2][1]
+        b2 = particle_data2[4][1]
+        theta2 = particle_data2[3][1]
+
+        # keep scaling down the a and b radii until the particles no longer intersect
+        while check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2):
+            a1 = a1 * 0.99
+            a2 = a2 * 0.99
+            b1 = b1 * 0.99
+            b2 = b2 * 0.99
+
+        # adjust the dictionary to reflect new a and b radii
+        particles[particle1][2] = ("a", a1)
+        particles[particle2][2] = ("a", a2)
+        particles[particle1][4] = ("b", b1)
+        particles[particle2][4] = ("b", b2)
+
+    return particles
+
+# TODO: account for the tuples inside of the dictionary and particles with multiple intersections or multiple potential intersections
 def layer_xy_rotate_particles(particles):
     """rotates particles to minimize particle intersections"""
-    d = particles
-    intersections_found = layer_check_intersections(d)
 
-    rotations = 0
-    tot_intersections = []
-    while len(intersections_found) > 0 and rotations < 90:
-        tot_intersections += [len(intersections_found)]
+    intersections_found = layer_check_intersections(particles)
 
-        for i in range(len(intersections_found)):
-            particle1 = intersections_found[i][0]
-            particle2 = intersections_found[i][1]
-            particle_data1 = d[particle1]
-            particle_data2 = d[particle2]
+    # loop through pairs of intersecting particles
+    for i in range(len(intersections_found)):
+        particle1 = intersections_found[i][0]
+        particle_data1 = particles[particle1]
+        particle2 = intersections_found[i][1]
+        particle_data2 = particles[particle2]
 
-            # extract particle data
-            a1 = particle_data1[2]
-            b1 = particle_data1[4]
-            a2 = particle_data2[2]
-            b2 = particle_data2[4]
+        # extract particle info
+        x1 = particle_data1[0][1]
+        y1 = particle_data1[1][1]
+        a1 = particle_data1[2][1]
+        b1 = particle_data1[4][1]
+        theta1 = particle_data1[3][1]
 
-            area1 = a1 * b1 * np.pi
-            area2 = a2 * b2 * np.pi
-            if area1 < area2:
-                to_rotate = particle1
-            else:
-                to_rotate = particle2
+        x2 = particle_data2[0][1]
+        y2 = particle_data2[1][1]
+        a2 = particle_data2[2][1]
+        b2 = particle_data2[4][1]
+        theta2 = particle_data2[3][1]
 
-            d[to_rotate][3] = d[to_rotate][3] - 2  # decreases theta by 2 degrees
+        # keep scaling down the a and b radii until the particles no longer intersect
+        total_angle_rotated = 0
+        while check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2) and total_angle_rotated < 180:
+            
+
+        # adjust the dictionary to reflect new a and b radii
+        particles[particle1][2] = ("theta", a1)
+        particles[particle2][2] = ("theta", a2)
+
+    return particles
+
+    # rotations = 0
+    # tot_intersections = []
+    # while len(intersections_found) > 0 and rotations < 90:
+    #     tot_intersections += [len(intersections_found)]
+
+    #     for i in range(len(intersections_found)):
+    #         particle1 = intersections_found[i][0]
+    #         particle2 = intersections_found[i][1]
+    #         particle_data1 = particles[particle1]
+    #         particle_data2 = particles[particle2]
+
+    #         # extract particle data
+    #         a1 = particle_data1[2]
+    #         b1 = particle_data1[4]
+    #         a2 = particle_data2[2]
+    #         b2 = particle_data2[4]
+
+    #         area1 = a1 * b1 * np.pi
+    #         area2 = a2 * b2 * np.pi
+    #         if area1 < area2:
+    #             to_rotate = particle1
+    #         else:
+    #             to_rotate = particle2
+
+    #         particles[to_rotate][3] = particles[to_rotate][3] - 2  # decreases theta by 2 degrees
 
 
-        if rotations == 89:
-            if len(intersections_found) <= min(tot_intersections):
-                print(len(intersections_found))
-                rotations = 90
-                continue
-            else:
-                rotations = rotations - 1
+    #     if rotations == 89:
+    #         if len(intersections_found) <= min(tot_intersections):
+    #             print(len(intersections_found))
+    #             rotations = 90
+    #             continue
+    #         else:
+    #             rotations = rotations - 1
 
-        print(len(intersections_found))
-        rotations = rotations + 1
-        intersections_found = check_intersections(d)
+    #     print(len(intersections_found))
+    #     rotations = rotations + 1
+    #     intersections_found = check_intersections(particles)
 
-    return d
+    # return particles
 
 def combine_layers(particle_layers, layer_infos, filename):
     """creating a text file from layer(s)"""
