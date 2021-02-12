@@ -708,6 +708,69 @@ def layer_check_intersections(particles):
 
     return intersecting_particles
 
+def scale_particles(particle_dictionary):
+    d = particle_dictionary
+    intersections_found = layer_check_intersections(d)
+
+    while len(intersections_found) > 0:
+        i = 0
+        for a in range(len(intersections_found)):
+            particle1 = intersections_found[i][0]
+            particle2 = intersections_found[i][1]
+            d[particle1][0] = d[particle1][0] * 0.98
+            d[particle1][1] = d[particle1][1] * 0.98
+            d[particle2][0] = d[particle2][0] * 0.98
+            d[particle2][1] = d[particle2][1] * 0.98
+            i = i + 1
+        intersections_found = check_intersections(d)
+
+    return d
+
+def xy_rotate_particles(particle_dictionary):
+    d = particle_dictionary
+    intersections_found = layer_check_intersections(d)
+
+    rotations = 0
+    tot_intersections = []
+    while len(intersections_found) > 0 and rotations < 90:
+        tot_intersections += [len(intersections_found)]
+
+        i = 0
+        for a in range(len(intersections_found)):
+            particle1 = intersections_found[i][0]
+            particle2 = intersections_found[i][1]
+            particle_data1 = d[particle1]
+            particle_data2 = d[particle2]
+
+            # extract particle data
+            a1 = particle_data1[0]
+            b1 = particle_data1[1]
+            a2 = particle_data2[0]
+            b2 = particle_data2[1]
+
+            area1 = a1 * b1 * np.pi
+            area2 = a2 * b2 * np.pi
+            if area1 < area2:
+                to_rotate = particle1
+            else:
+                to_rotate = particle2
+
+            d[to_rotate][6] = d[to_rotate][6] - 2  # decreases theta by 2 degrees
+            i = i + 1
+
+        if rotations == 179:
+            if len(intersections_found) <= min(tot_intersections):
+                print(len(intersections_found))
+                rotations = 180
+                continue
+            else:
+                rotations = rotations - 1
+
+        print(len(intersections_found))
+        rotations = rotations + 1
+        intersections_found = check_intersections(d)
+
+    return d
 
 def combine_layers(particle_layers, layer_infos, filename):
     """creating a text file from layer(s)"""
