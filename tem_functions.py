@@ -708,26 +708,28 @@ def layer_check_intersections(particles):
 
     return intersecting_particles
 
-def scale_particles(particle_dictionary):
-    d = particle_dictionary
+# TODO: account for the tuples inside of the dictionary
+def layer_scale_particles(particles):
+    """scales particles to get rid of intersections"""
+    d = particles
     intersections_found = layer_check_intersections(d)
 
     while len(intersections_found) > 0:
-        i = 0
-        for a in range(len(intersections_found)):
+        for i in range(len(intersections_found)):
             particle1 = intersections_found[i][0]
             particle2 = intersections_found[i][1]
-            d[particle1][0] = d[particle1][0] * 0.98
-            d[particle1][1] = d[particle1][1] * 0.98
-            d[particle2][0] = d[particle2][0] * 0.98
-            d[particle2][1] = d[particle2][1] * 0.98
-            i = i + 1
-        intersections_found = check_intersections(d)
+            d[particle1][2] = d[particle1][2] * 0.98
+            d[particle1][4] = d[particle1][4] * 0.98
+            d[particle2][2] = d[particle2][2] * 0.98
+            d[particle2][4] = d[particle2][4] * 0.98
+        intersections_found = layer_check_intersections(d)
 
     return d
 
-def xy_rotate_particles(particle_dictionary):
-    d = particle_dictionary
+# TODO: account for the tuples inside of the dictionary
+def layer_xy_rotate_particles(particles):
+    """rotates particles to minimize particle intersections"""
+    d = particles
     intersections_found = layer_check_intersections(d)
 
     rotations = 0
@@ -735,18 +737,17 @@ def xy_rotate_particles(particle_dictionary):
     while len(intersections_found) > 0 and rotations < 90:
         tot_intersections += [len(intersections_found)]
 
-        i = 0
-        for a in range(len(intersections_found)):
+        for i in range(len(intersections_found)):
             particle1 = intersections_found[i][0]
             particle2 = intersections_found[i][1]
             particle_data1 = d[particle1]
             particle_data2 = d[particle2]
 
             # extract particle data
-            a1 = particle_data1[0]
-            b1 = particle_data1[1]
-            a2 = particle_data2[0]
-            b2 = particle_data2[1]
+            a1 = particle_data1[2]
+            b1 = particle_data1[4]
+            a2 = particle_data2[2]
+            b2 = particle_data2[4]
 
             area1 = a1 * b1 * np.pi
             area2 = a2 * b2 * np.pi
@@ -755,13 +756,13 @@ def xy_rotate_particles(particle_dictionary):
             else:
                 to_rotate = particle2
 
-            d[to_rotate][6] = d[to_rotate][6] - 2  # decreases theta by 2 degrees
-            i = i + 1
+            d[to_rotate][3] = d[to_rotate][3] - 2  # decreases theta by 2 degrees
 
-        if rotations == 179:
+
+        if rotations == 89:
             if len(intersections_found) <= min(tot_intersections):
                 print(len(intersections_found))
-                rotations = 180
+                rotations = 90
                 continue
             else:
                 rotations = rotations - 1
