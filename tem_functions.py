@@ -772,12 +772,12 @@ def layer_xy_rotate_particles(particles):
 
         # keep scaling down the a and b radii until the particles no longer intersect
         total_angle_rotated = 0
-        while check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2) and total_angle_rotated < 180:
+        # while check_intersection(a1, b1, x1, y1, theta1, a2, b2, x2, y2, theta2) and total_angle_rotated < 180:
             
 
         # adjust the dictionary to reflect new a and b radii
-        particles[particle1][2] = ("theta", a1)
-        particles[particle2][2] = ("theta", a2)
+        particles[particle1][2] = ("theta", theta1)
+        particles[particle2][2] = ("theta", theta2)
 
     return particles
 

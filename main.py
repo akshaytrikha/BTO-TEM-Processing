@@ -121,6 +121,9 @@ def pipeline(image_names, thresholds, output_file, debug=False):
             # calculate c radii for merged particles
             merge_particles = get_c(merge_particles)
 
+            # scale the particles to get rid of intersections
+            merge_particles = layer_scale_particles(merge_particles)
+
             # get layer stats
             info = get_layer_info(merge_particles)
 
@@ -138,7 +141,7 @@ def pipeline(image_names, thresholds, output_file, debug=False):
 
 # run pipeline as script for given image(s) and thresholds
 def main():
-    pipeline(["./inputs/500nm_epoxy/500nm_epoxy_15.jpg"], [70], "./outputs/500nm_epoxy/500nm_epoxy_15.txt", True)
+    pipeline(["./inputs/TES-36a-cropped.tif", "./inputs/TES-36b-cropped.tif", "./inputs/TES-36b-cropped.tif"], [55, 35, 45], "./outputs/12_02_21_scaled_abe.txt")
     
 if __name__ == "__main__":
     main()
