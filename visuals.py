@@ -61,6 +61,54 @@ def draw_short_lengths(image, short_pairs):
         # cv.line(image, short_pair[0], short_pair[1], [0,255,255])
         cv.line(image, (short_pair[0][0], short_pair[0][1]), (short_pair[1][0], short_pair[1][1]), [0,255,255])
 
+        
+def split_image(gray_image, shape, display=False):
+    """splits image into shape (# of vertical segments, # of horizontal segments) 
+       and returns image chunk boundaries (clockwise starting from top left), and modified image"""
+    # shape = (1,1) means no transformation is performed
+    # shape = (2,2) means image is split into 4 quadrants
+    # TODO: only works for equal-sized chunks
+    
+    image_copy = gray_image.copy()
+    
+    rows = len(image_copy)
+    cols = len(image_copy[0])
+    
+    # check if image is divisible equally into shape 
+    mod_rows = rows % shape[0]
+    mod_cols = cols % shape[1]
+    
+    # if isn't crop rows and cols so that it is
+    if mod_rows != 0:
+        rows -= mod_rows
+    if mod_cols != 0:
+        cols -= mod_cols
+    
+    # calculate vertical and horizintal segment amounts
+    vert_seg = int(rows/shape[0])
+    hor_seg = int(cols/shape[1])
+    
+    # calculate and return sub-image boundaries
+    boundaries = []
+    for vert_i in range(0, shape[0]):
+        for hor_i in range(0, shape[1]):
+            boundaries += [[(hor_i * hor_seg, vert_i * vert_seg), 
+                           ((hor_i + 1) * hor_seg, vert_i * vert_seg),
+                           ((hor_i + 1) * hor_seg, (vert_i + 1) * vert_seg),
+                           (hor_i * hor_seg, (vert_i + 1) * vert_seg)]]
+
+    # draw vertical lines
+    for vert_i in range(1, shape[0]+1):
+        cv.line(image_copy, (vert_i * hor_seg, 0), (vert_i * hor_seg, rows), [100,0,100], 10)
+    # draw horizontal lines
+    for hor_i in range(1, shape[1]+1):
+        cv.line(image_copy, (0, hor_i * vert_seg), (cols, hor_i * vert_seg), [100,0,100], 10)
+        
+    if display:
+        display_images([image_copy], ["Partitioned Image"], [1])
+        
+    return boundaries, image_copy
+
 
 def layer_render(particles, layer_info, rendering_type="wireframe"):
     """renders a dictionary of particles"""
