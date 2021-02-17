@@ -2,8 +2,10 @@
 # Akshay Trikha
 # 8th February, 2021
 
-from tem_functions import *     # tem_functions.py contains image processing functions
-from visuals import *           # visuals.py contains visualization functions               
+from tem_functions import *         # tem_functions.py contains image processing functions
+from visuals import *               # visuals.py contains visualization functions          
+from multiprocessing import Pool    # running images concurrently
+import logging     
 
 ### constants
 # nm_per_pixel = 100 / 95 	
@@ -13,6 +15,46 @@ nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 # nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
 
 expected_radius = 100 # in nm
+
+def pipeline_test(inputs):
+    """runs pipeline for 1 image"""
+    start = time.perf_counter()
+
+    image_name, threshold, output_file = inputs
+        
+    # setup, finding optimal watershed threshold, populating particles dictionary
+    color_image, dist_transform, sure_bg = setup(image_name, threshold, False)
+    dist_transform_thresh = get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius)
+    watershed_markers = get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_image, False)
+    agg_watershed_markers = get_watershed_markers(dist_transform, 0.1, sure_bg, color_image, False)
+    contour_colors, chords_color_copy = get_contour_colors(watershed_markers, color_image)
+    agg_contour_colors, agg_chords_color_copy = get_contour_colors(agg_watershed_markers, color_image)
+
+    # find particle centerpoints
+    particles = find_centerpoints(contour_colors)
+    agg_particles = find_centerpoints(agg_contour_colors)
+
+    # calculate particle areas
+    particle_areas = get_areas(watershed_markers)
+    agg_areas = get_areas(agg_watershed_markers)
+
+    # merge dictionaries of particles and agglomerates
+    merge_particles, merge_contour_colors = match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas)
+
+    # long and short chord lengths
+    long_pairs, merge_particles, contour_colors = get_long_chord_lengths(merge_particles, particles, contour_colors, merge_contour_colors)
+    short_pairs, merge_particles = get_short_chord_lengths(merge_particles, merge_contour_colors, long_pairs)
+
+    # calculate c radii for merged particles
+    merge_particles = get_c(merge_particles)
+
+    # scale the particles to get rid of intersections
+    merge_particles = layer_scale_particles(merge_particles)
+
+    # get layer stats
+    info = get_layer_info(merge_particles)
+
+    return time.perf_counter() - start
 
 
 def pipeline(image_names, thresholds, output_file, debug=False):
@@ -141,7 +183,27 @@ def pipeline(image_names, thresholds, output_file, debug=False):
 
 # run pipeline as script for given image(s) and thresholds
 def main():
-    pipeline(["./inputs/TES-36a-cropped.tif", "./inputs/TES-36b-cropped.tif", "./inputs/TES-36b-cropped.tif"], [55, 35, 45], "./outputs/12_02_21_scaled_abe.txt")
+    # pipeline(["./inputs/TES-36a-cropped.tif", "./inputs/TES-36b-cropped.tif", "./inputs/TES-36b-cropped.tif"], [55, 35, 45], "./outputs/12_02_21_scaled_abe.txt")
+
+    # particle_layers = []
+    # layer_infos = []
+
+    inputs = [["./inputs/TES-36a-cropped.tif", 55, "output_file"], ["./inputs/TES-36b-cropped.tif", 35, "output_file"], ["./inputs/TES-36e-cropped.tif", 45, "output_file"]]
+    output = []
+
+    start = time.perf_counter()
+
+    # # pool is an instance of Pool
+    # with Pool(len(inputs)) as pool:
+    #     output = pool.map(pipeline_test, inputs)
+    pipeline_test(inputs[0])
+
+    print(output, "\n")
+    print("total:", time.perf_counter() - start)
+
+    # output multiple layer data into .txt
+    # combine_layers(particle_layers, layer_infos, "./outputs/TEST_16_02_21_scaled_abe.txt")
+
     
 if __name__ == "__main__":
     main()
