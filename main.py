@@ -4,8 +4,8 @@
 
 from tem_functions import *         # tem_functions.py contains image processing functions
 from visuals import *               # visuals.py contains visualization functions          
-from multiprocessing import Pool    # running images concurrently
-import logging     
+from multiprocessing import Pool    # run images concurrently
+import argparse                     # parse command line arguments
 
 ### constants
 # nm_per_pixel = 100 / 95 	
@@ -15,6 +15,11 @@ nm_per_pixel = 100 / 113 	# In TES-II-36a.tif there are 113 pixels per 100 nm
 # nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
 
 expected_radius = 100 # in nm
+
+""" 
+example input:
+python3 main.py -n 3 -in "./inputs/TES-36a-cropped.tif" -in "./inputs/TES-36b-cropped.tif" -in "./inputs/TES-36e-cropped.tif" -t 55 -t 35 -t 45 -out "./outputs/12_02_21_scaled_abe.txt" -r 100 -nm 0.8849557522 -mp
+"""
 
 def pipeline_test(inputs):
     """runs pipeline for 1 image"""
@@ -182,28 +187,54 @@ def pipeline(image_names, thresholds, output_file, debug=False):
 
 
 # run pipeline as script for given image(s) and thresholds
-def main():
-    # pipeline(["./inputs/TES-36a-cropped.tif", "./inputs/TES-36b-cropped.tif", "./inputs/TES-36b-cropped.tif"], [55, 35, 45], "./outputs/12_02_21_scaled_abe.txt")
+def main(args):
+    """main function run with command line args"""
+
+    # create inputs list to feed to pool.map()
+    inputs = [[args.input_filename[x], args.threshold[x], args.output_filename[0]] for x in range(args.number)]
+
+    # inputs = [["./inputs/TES-36a-cropped.tif", 55, "output_file"], 
+    #           ["./inputs/TES-36b-cropped.tif", 35, "output_file"],
+    #           ["./inputs/TES-36e-cropped.tif", 45, "output_file"]]
 
     # particle_layers = []
     # layer_infos = []
-
-    inputs = [["./inputs/TES-36a-cropped.tif", 55, "output_file"], ["./inputs/TES-36b-cropped.tif", 35, "output_file"], ["./inputs/TES-36e-cropped.tif", 45, "output_file"]]
     output = []
 
-    start = time.perf_counter()
+    # run pipline serially or in parallel
+    if args.multiprocess:
+        start = time.perf_counter()
+        with Pool(args.number) as pool:     # pool is an instance of Pool
+            output = pool.map(pipeline_test, inputs)
+        print(output, "\n")
+        print("pipeline ran in:", time.perf_counter() - start)
+    else:
+        start = time.perf_counter()
+        for i in range(args.number):
+            pipeline_test(inputs[i])
+        print(output, "\n")
+        print("pipeline ran in:", time.perf_counter() - start)
 
-    # # pool is an instance of Pool
-    # with Pool(len(inputs)) as pool:
-    #     output = pool.map(pipeline_test, inputs)
-    pipeline_test(inputs[0])
+    # # output multiple layer data into .txt
+    # # combine_layers(particle_layers, layer_infos, "./outputs/TEST_16_02_21_scaled_abe.txt")
+        
 
-    print(output, "\n")
-    print("total:", time.perf_counter() - start)
-
-    # output multiple layer data into .txt
-    # combine_layers(particle_layers, layer_infos, "./outputs/TEST_16_02_21_scaled_abe.txt")
-
-    
 if __name__ == "__main__":
-    main()
+    # create parser object and describe what it parses
+    parser = argparse.ArgumentParser(description='TEM Image Processing Pipeline')
+
+    # add arguments to parser
+    parser.add_argument('-n', '--number', type=np.int8, help='number of images', required=True)
+    parser.add_argument('-in', '--input_filename', type=str, action='append', help='input image filename(s)', required=True)
+    parser.add_argument('-t', '--threshold', type=np.uint8, action='append', help='binary threshold values for input images', required=True)
+    parser.add_argument('-out', '--output_filename', type=str, action='append', help='output image filename(s)', required=True)
+    parser.add_argument('-r', '--expected_radius', type=np.uint16, help='expected radius of nanoparticles', required=True)
+    parser.add_argument('-nm', '--nm_per_pixel', type=np.float16, help='nm per pixel in input images', required=True)
+    parser.add_argument('-mp', '--multiprocess', dest='multiprocess', action='store_true', help='run images through pipeline in parallel (more memory load)')
+    parser.add_argument('-no_mp', '--no_multiprocess', dest='multiprocess', action='store_false', help='run images through pipeline in parallel (less memory load)')
+    parser.set_defaults(multiprocess=True) # default to running images in parallel
+
+    # parse command line arguments and pass them to main
+    args=parser.parse_args()
+    main(args)
+    # args.outputFile.close()
