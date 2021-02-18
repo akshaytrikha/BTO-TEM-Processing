@@ -827,7 +827,9 @@ def combine_layers(particle_layers, layer_infos, filename):
     # open the file to write in
     with open(filename, "w") as output_file:
         # keeping track height, volume, and x and y lengths of prism
-        total_height = 1
+        electrode_offset = 1
+
+        total_height = electrode_offset # multiply by 2 if electrode offset != 1
         total_volume = 0
         x_length_prism = 0
         y_length_prism = 0
@@ -856,7 +858,7 @@ def combine_layers(particle_layers, layer_infos, filename):
 
         particleID = 1
         layer_counter = 0
-        height_adjustment = 1
+        height_adjustment = electrode_offset
         # loop through the layers
         for layer in particle_layers:
             # update the current height at which to place particles by adding in half the height of new layer
