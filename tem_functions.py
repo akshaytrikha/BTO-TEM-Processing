@@ -495,71 +495,121 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs):
         
         short_pixel = []
         current_score = []
+        
         # loop through all pixels for a color
         for pixel in current_pixels:
+            
             # calculate change in x and y with respect to midpoint for pixel
             dx = pixel[0] - mid_x
             dy = pixel[1] - mid_y
+            
             # change in x cannot be 0
-            if dx != 0:
-                # compute slope between pixel and midpoint
-                comp_slope = dy/dx
-                # score ~= ratio of pixel slope / orthogonal slope from long chord length
-                score = np.abs(1 - comp_slope / orthogonal_slope)
-                # set threshold that pixel slope / orthogonal slope must be < 0.5
-                if (score < 0.5):
-                    # if pixel isn't already in short_pixel
-                    if pixel not in short_pixel:
-                        short_pixel += [pixel]
-                        current_score += [score]
+            if dx == 0:
+                dx = 0.01
+            
+            # compute slope between pixel and midpoint
+            comp_slope = dy/dx
+            # score ~= ratio of pixel slope / orthogonal slope from long chord length
+            score = np.abs(1 - comp_slope / orthogonal_slope)
+
+            # set threshold that pixel slope / orthogonal slope must be < 0.5
+            if (score < 0.5):
+
+                # if pixel isn't already in short_pixel
+                if pixel not in short_pixel:
+                    short_pixel += [pixel]
+                    current_score += [score]
+            
+            # if pixel is right next to midpoint, add it to short_pixel regardless of score
+            elif abs(mid_x - pixel[0]) < 2 and abs(mid_y - pixel[1]) < 2:
+                short_pixel += [pixel]
+                current_score += [score]
         
         # record pair of points of short chord length
         short_pixels += [short_pixel]
         # record each pair of points' scores
         scores += [current_score]
-
+        
     # store min pixel pairs to visualize lines
     short_pairs = []
-
+    
     # process pairs to keep ones with min score
     for i in range(len(short_pixels)):
         if len(short_pixels[i]) >= 2:
-            # first find pixel with overall minimum
-            min_index_1 = np.argmin(scores[i])
-            min_pixel_1 = short_pixels[i][min_index_1]
-            
-            # set the minimum distance in pixels to be 3/5 of the expected diameter
-            min_distance = (6/5) * expected_radius * (1/nm_per_pixel)
 
-            # now loop through rest of pixels to find far away pixel with low score
-            for j in range(len(short_pixels[i])):
-                distance = pixel_distance(min_pixel_1, short_pixels[i][j])
-                if distance > min_distance:
-                    min_pixel_2 = short_pixels[i][j]
+            # first find pixel with overall minimum score
+            min_index = np.argmin(scores[i])
+            min_pixel = short_pixels[i][min_index]
+            
+            # calculate distances from pixel with minimum score
+            distances_1 = []
+            for pixel in short_pixels[i]:
+                distances_1 += [pixel_distance(min_pixel, pixel)]
+            
+            # find the furthest pixel from the pixel with the minimum score
+            max_dist_index = np.argmax(distances_1)
+            max_dist_pixel = short_pixels[i][max_dist_index]
+            
+            # calculate distances from furthest pixel
+            distances_2 = []
+            for pixel in short_pixels[i]:
+                distances_2 += [pixel_distance(max_dist_pixel, pixel)]
+                
+            pixels_1 = []
+            pixels_2 = []
+            scores_1 = []
+            scores_2 = []
+            # loop through the pixels and group the pixels into 2 groups
+            for k in range(len(short_pixels[i])):
+                
+                # group pixels closest to the min pixel
+                if distances_1[k] < distances_2[k]:
+                    pixels_1 += [short_pixels[i][k]]
+                    scores_1 += [scores[i][k]]
                     
-                    # store pixels for cv.line() later
-                    short_pairs += [(min_pixel_1, min_pixel_2)]
-                    
-                    # long_pairs[i][0] is current color
-                    # add short distance to particles dictionary, accounting for nm per pixel
-                    particles[long_pairs[i][0]] += [("b", (distance/2)*nm_per_pixel)]
-                    break
+                # group pixels closest to the furthest pixel
+                else:
+                    pixels_2 += [short_pixels[i][k]]
+                    scores_2 += [scores[i][k]]
+            
+            # find the two pixels by finding the minimum score for each group
+            min_index_1 = np.argmin(scores_1)
+            min_index_2 = np.argmin(scores_2)
+            min_pixel_1 = pixels_1[min_index_1]
+            min_pixel_2 = pixels_2[min_index_2]
+            
+            # find b radius, accounting for nm per pixel
+            b_radius = (pixel_distance(min_pixel_1, min_pixel_2)/2)*nm_per_pixel
+            
+            # if b_radius is bigger than 15% of the expected radius
+            if b_radius > 0.15 * expected_radius:
+                # add b radius to particles dictionary
+                particles[long_pairs[i][0]] += [("b", b_radius)]
+                
+                # store pixels for cv.line() later
+                short_pairs += [(min_pixel_1, min_pixel_2)]
 
     return short_pairs, particles
 
 
 def get_c(particles):
-    """sets the c radius for each of the particles to be the average of the a and b radii for that particle"""
+    """sets the c radius for each of the particles to be the average of the a and b radii for that particle or expected_radius"""
     # loop through all the particles
     for particle in particles:
         # get particle data
         particle_data = particles[particle]
         # if the particle has an x and y position, a and b radii, and an angle
         if len(particle_data) == 5:
-            # set c radius to be average of a and b radii
-            c_radius = (particle_data[2][1] + particle_data[4][1]) / 2
+            if particle_data[2][1] < expected_radius:
+                # set c radius to be the expected radius
+                c_radius = expected_radius
+            else:
+                # set c radius to be average of a and b radii
+                c_radius = (particle_data[2][1] + particle_data[4][1]) / 2
+            
             # add c radius to the particles dictionary
             particles[particle] += [("c", c_radius)]
+
     return particles
 
 
@@ -861,14 +911,21 @@ def combine_layers(particle_layers, layer_infos, filename):
         height_adjustment = electrode_offset
         # loop through the layers
         for layer in particle_layers:
-            # update the current height at which to place particles by adding in half the height of new layer
-            current_height = height_adjustment + (layer_heights[layer_counter]/2)
             # loop through the particles
             for particle in layer:
                 # get particle data
                 particle_data = layer[particle]
                 # if the particle has an x and y position, a, b, and c radii, and an angle
                 if len(particle_data) == 6:
+
+                    # calculating a randomized current height
+                    leftover_space = np.round(layer_heights[layer_counter] - (particle_data[5][1]*2))
+                    if leftover_space > 0:
+                        rand_int = np.random.randint(0, leftover_space)
+                        current_height = height_adjustment + particle_data[5][1] + rand_int
+                    else:
+                        current_height = height_adjustment + (layer_heights[layer_counter]/2)
+
                     # write all the data for the particle to the text file
                     output_file.writelines(particle_data[2][0] + str(particleID) + " " + str(particle_data[2][1]) + "[nm]" + "\n")       # a
                     output_file.writelines(particle_data[4][0] + str(particleID) + " " + str(particle_data[4][1]) + "[nm]" + "\n")       # b
