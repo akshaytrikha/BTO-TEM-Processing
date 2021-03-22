@@ -2,16 +2,16 @@
 # Akshay Trikha, Katie Partington
 # 4th November, 2020
 
-import cv2 as cv                            # OpenCV for image processing
-import numpy as np                          # NumPy for quick maths
-from collections import Counter             # dictionary quick maths
-import time                                 # measure function execution times
-from numba import jit, njit, types, typeof  # optimization library
-from numba.typed import Dict, List          # optimized data structures
-from visuals import *                       # visuals.py contains visualization functions
-from main import *                          # main.py contains global constants
-from scipy.optimize import fsolve       # used for solving system of nonlin eqs. (particle intersections)
-import warnings                         # (particle intersections)
+import cv2 as cv                             # OpenCV for image processing
+import numpy as np                           # NumPy for quick maths
+from collections import Counter, defaultdict # dictionary quick maths
+import time                                  # measure function execution times
+from numba import jit, njit, types, typeof   # optimization library
+from numba.typed import Dict, List           # optimized data structures
+from visuals import *                        # visuals.py contains visualization functions
+from main import *                           # main.py contains global constants
+from scipy.optimize import fsolve            # used for solving system of nonlin eqs. (particle intersections)
+import warnings                              # (particle intersections)
 warnings.filterwarnings("ignore", category=RuntimeWarning) # (particle intersections)
 
 
@@ -641,6 +641,19 @@ def set_max_c(particles):
     return particles
 
 
+# TODO: find root cause of duplicate particles and fix there, this is a temporary fix
+def delete_duplicates(particles):
+    # dictionary that maps (x,y) centerpoints to particle ids
+    centerpoints = {}
+    for id in list(particles):
+        centerpoint = (particles[id][0][1], particles[id][1][1])
+        if centerpoint not in centerpoints:
+            centerpoints[(particles[id][0][1], particles[id][1][1])] = id
+        else:
+            del particles[id]
+    return particles
+    
+
 def get_layer_info(particles):
     """gets the relevant info from a particle dictionary representing a single layer so that it can be combined with other layers"""
     # keeping track of maximum and minimum x and y positions
@@ -905,7 +918,7 @@ def combine_layers(particle_layers, layer_infos, filename):
                 y_position_prism = info[3]
         # calculate prism volume fraction
         volume_fraction = total_volume/(x_length_prism*y_length_prism*total_height)
-
+               
         particleID = 1
         layer_counter = 0
         height_adjustment = electrode_offset
@@ -952,6 +965,9 @@ def combine_layers(particle_layers, layer_infos, filename):
         output_file.writelines("x_position_prism " + str(x_position_prism) + "[nm]" + "\n")      # x position prism
         output_file.writelines("y_position_prism " + str(y_position_prism) + "[nm]" + "\n")      # x position prism
         output_file.writelines("volume_fraction " + str(volume_fraction))                        # volume fraction
+        
+        # delete duplicate particles (TODO: do this better)
+        # loop through 
  
         # close output file
         output_file.close()
