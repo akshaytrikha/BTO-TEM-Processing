@@ -383,7 +383,7 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
         long_pair_pixels = np.zeros((2,2), dtype=int)
         long_pair_pixels, cur_max_len = get_long_chord_lengths_helper(color_pixels, long_pair_pixels)
 
-        # if the particle has a diamter greater than twice the expected diameter, mark it as an agglomerate
+        # if the particle has a diameter greater than twice the expected diameter, mark it as an agglomerate
         if cur_max_len * nm_per_pixel > 4 * expected_radius:
             remaining_agglomerates += [color]
         
@@ -598,7 +598,7 @@ def get_c(particles):
     for particle in particles:
         # get particle data
         particle_data = particles[particle]
-        # if the particle has an x and y position, a and b radii, and an angle
+        # if the particle has x and y positions, a and b radii, and an angle
         if len(particle_data) == 5:
             if particle_data[2][1] < expected_radius:
                 # set c radius to be the expected radius
