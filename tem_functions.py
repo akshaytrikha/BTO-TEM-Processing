@@ -80,7 +80,7 @@ def get_watershed_markers(dist_transform, dist_transform_thresh, sure_bg, color_
 
 
 @njit
-def get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh):
+def get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh, nm_per_pixel):
     # loop through pixels in watershed markers
     for row in range(1, len(watershed_markers) - 1):
         for col in range(1, len(watershed_markers[0]) - 1):
@@ -108,7 +108,7 @@ def get_watershed_threshold_helper(particle_colors, watershed_markers, dist_tran
 
 
 # TODO: differentiate parameters and variable names
-def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius):
+def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radius, nm_per_pixel):
     """outputs optimal threshold for thresholding distance transform to obtain separated particles (not agglomerates)"""
     max_radius = 3 * expected_radius # just needs to be something > 2 * expected_radius
     dist_transform_thresh = 0.25
@@ -122,7 +122,7 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
             value_type=types.int64
         )
 
-        max_radius = get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh)
+        max_radius = get_watershed_threshold_helper(particle_colors, watershed_markers, dist_transform_thresh, nm_per_pixel)
                 
         dist_transform_thresh += 0.05
 
@@ -219,7 +219,7 @@ def get_contour_colors(watershed_markers, color_image):
     return contour_colors, chords_color_copy
 
 
-def find_centerpoints(contour_colors):
+def find_centerpoints(contour_colors, nm_per_pixel):
     """calculates the centerpoint for each color"""
 
     # maps each particle to its extracted information
@@ -246,7 +246,7 @@ def find_centerpoints(contour_colors):
 
 
 @njit
-def get_areas_helper(watershed_markers, particle_areas):
+def get_areas_helper(watershed_markers, particle_areas, nm_per_pixel):
     # loop through pixels in watershed markers and count the number of pixels for each color
     for row in range(1, len(watershed_markers) - 1):
         for col in range(1, len(watershed_markers[0]) - 1):
@@ -272,7 +272,7 @@ def get_areas_helper(watershed_markers, particle_areas):
     return particle_areas
 
 
-def get_areas(watershed_markers):
+def get_areas(watershed_markers, nm_per_pixel):
     """get the areas of the particles"""
 
     # dictionary mapping colors to their areas
@@ -281,12 +281,12 @@ def get_areas(watershed_markers):
         value_type=types.float64
     )
 
-    particle_areas = get_areas_helper(watershed_markers, particle_areas)
+    particle_areas = get_areas_helper(watershed_markers, particle_areas, nm_per_pixel)
 
     return particle_areas
 
 
-def get_replacements(agg_contour, potential_replacement_particles):
+def get_replacements(agg_contour, potential_replacement_particles, nm_per_pixel):
     """takes the contour of an agglomerate and returns a list of replacement particle IDs"""
 
     # convert agg_contour weird Numba list datatype into ndarray to feed to cv functions
@@ -308,7 +308,7 @@ def get_replacements(agg_contour, potential_replacement_particles):
     return replacements
 
 
-def match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas):
+def match_images(particles, contour_colors, agg_particles, agg_contour_colors, agg_areas, nm_per_pixel):
     """Replaces agglomerates with particles and outputs a single dictionary"""
     out_contour_colors = {}
     out_particles = {}
@@ -322,7 +322,7 @@ def match_images(particles, contour_colors, agg_particles, agg_contour_colors, a
             # then particle is agglomerate
 
             agg_contour = agg_contour_colors[agg_particle]
-            replacements = get_replacements(agg_contour, particles)
+            replacements = get_replacements(agg_contour, particles, nm_per_pixel)
 
             # add particles to output dictionaries
             for i in range(len(replacements)):
@@ -368,7 +368,7 @@ def get_long_chord_lengths_helper(color_pixels, long_pair_pixels):
 
 
 #TODO: adjust output to account for change in the order in which extracted information is added to the dictionary
-def get_long_chord_lengths(particles, potential_replacement_particles, potential_contour_colors, contour_colors):
+def get_long_chord_lengths(particles, potential_replacement_particles, potential_contour_colors, contour_colors, nm_per_pixel):
     """finds the long chord lengths for the contours and returns them as pairs of pixel coordinates"""
 
     # store long pairs as [[color, (start pixel), (end pixel)]]
@@ -403,7 +403,7 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
 
         # find the replacement particles for a given agglomerate
         agg_contour = contour_colors[color]
-        replacements = get_replacements(agg_contour, potential_replacement_particles)
+        replacements = get_replacements(agg_contour, potential_replacement_particles, nm_per_pixel)
 
         # find the current maximum particle ID
         cur_max_id = np.max(list(particles.keys()))
@@ -437,7 +437,7 @@ def get_long_chord_lengths(particles, potential_replacement_particles, potential
     return long_pairs, particles, contour_colors
 
 
-def get_short_chord_lengths(particles, contour_colors, long_pairs):
+def get_short_chord_lengths(particles, contour_colors, long_pairs, nm_per_pixel):
     """finds the short chord lengths for the contours given the long pairs and returns them as pairs of pixel coordinates"""
 
     # store short chord length pair of points once found
