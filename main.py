@@ -14,7 +14,7 @@ import argparse                     # parse command line arguments
 # nm_per_pixel = 500 / 291 	# In TES-II-36h.tif there are 291 pixels per 500 nm
 # nm_per_pixel = 500 / 108 	# In 500nm_epoxy_15.jpg there are 108 pixels per 0.5 micrometer
 
-expected_radius = 250 # in nm
+expected_radius = 100 # in nm
 
 """ 
 example input:

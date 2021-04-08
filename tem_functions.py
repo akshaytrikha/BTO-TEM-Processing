@@ -301,7 +301,7 @@ def get_replacements(agg_contour, potential_replacement_particles, nm_per_pixel)
         center = (int(potential_replacement_particles[particle][0][1] * 1/nm_per_pixel), int(potential_replacement_particles[particle][1][1] * 1/nm_per_pixel))
         
         # check if their centerpoints lie within the agglomerate's contour
-        draw_point_contour(center, agg_contour)
+        # draw_point_contour(center, agg_contour) # if you want to visualize the point
         if cv.pointPolygonTest(agg_contour, center, False) == 0.0:  # pointPolygonTest returns 0.0 if pixel in or on contour, -1.0 otherwise
             replacements += [particle]
 
@@ -654,55 +654,6 @@ def delete_duplicates(particles):
     return particles
     
 
-def get_layer_info(particles):
-    """gets the relevant info from a particle dictionary representing a single layer so that it can be combined with other layers"""
-    # keeping track of maximum and minimum x and y positions
-    max_x = 0
-    min_x = 10000
-    max_y = 0
-    min_y = 10000
-    # keeping track of maximum c radius and the volume of particles in the layer
-    max_c = 0
-    layer_volume = 0
-
-    # loop through particles
-    for particle in particles:
-        # get particle data
-        particle_data = particles[particle]
-        # if the particle has an x and y position, a, b, and c radii, and an angle
-        if len(particle_data) == 6:
-            # extract particle info
-            x = particle_data[0][1]
-            y = particle_data[1][1]
-            a = particle_data[2][1]
-            b = particle_data[4][1]
-            c = particle_data[5][1]
-            # add the volume of the particle to the layer volume
-            layer_volume += (4/3)*np.pi*a*b*c
-            
-            # update minimum and maximum x and y values
-            if (x - a) < min_x:
-                min_x = x-a
-            if (x + a) > max_x:
-                max_x = x+a
-            if (y - a) < min_y:
-                min_y = y-a
-            if (y + a) > max_y:
-                max_y = y+a
-            # update maximum c radius
-            if c > max_c:
-                max_c = c
-
-    # set x and y lengths of the layer 
-    x_length = max_x - min_x
-    y_length = max_y - min_y
-    
-    # find volume fraction of the layer
-    volume_fraction = layer_volume/(x_length*y_length*max_c*2)
-
-    return [x_length, y_length, min_x, min_y, max_c, layer_volume, volume_fraction]
-
-
 def double_solve(f1, f2, x0, y0):
     """solves the system of equations"""
     func = lambda x: [f1(x[0], x[1]), f2(x[0], x[1])]
@@ -885,17 +836,69 @@ def layer_xy_rotate_particles(particles):
 
     # return particles
 
+
+def get_layer_info(particles):
+    """gets the relevant info from a particle dictionary representing a single layer so that it can be combined with other layers"""
+    # keeping track of maximum and minimum x and y positions
+    max_x = 0
+    min_x = 10000
+    max_y = 0
+    min_y = 10000
+    # keeping track of maximum c radius and the volume of particles in the layer
+    max_c = 0
+    layer_volume = 0
+
+    # loop through particles
+    for particle in particles:
+        # get particle data
+        particle_data = particles[particle]
+        # if the particle has an x and y position, a, b, and c radii, and an angle
+        if len(particle_data) == 6:
+            # extract particle info
+            x = particle_data[0][1]
+            y = particle_data[1][1]
+            a = particle_data[2][1]
+            b = particle_data[4][1]
+            c = particle_data[5][1]
+            # add the volume of the particle to the layer volume
+            layer_volume += (4/3)*np.pi*a*b*c
+            
+            # update minimum and maximum x and y values
+            if (x - a) < min_x:
+                min_x = x-a
+            if (x + a) > max_x:
+                max_x = x+a
+            if (y - a) < min_y:
+                min_y = y-a
+            if (y + a) > max_y:
+                max_y = y+a
+            # update maximum c radius
+            if c > max_c:
+                max_c = c
+
+    # set x and y lengths of the layer 
+    x_length = max_x - min_x
+    y_length = max_y - min_y
+    
+    # find volume fraction of the layer
+    volume_fraction = layer_volume/(x_length*y_length*max_c*2)
+
+    return [max_x, max_y, min_x, min_y, max_c, layer_volume, volume_fraction]
+
+
 def combine_layers(particle_layers, layer_infos, filename):
     """creating a text file from layer(s)"""
     # open the file to write in
     with open(filename, "w") as output_file:
-        # keeping track height, volume, and x and y lengths of prism
-        electrode_offset = 1
+        electrode_and_layer_spacing = 0.0001
 
-        total_height = electrode_offset # multiply by 2 if electrode offset != 1
+        # keeping track of height, volume, and minimum and maximum x and y lengths of prism
+        total_height = electrode_and_layer_spacing
         total_volume = 0
-        x_length_prism = 0
-        y_length_prism = 0
+
+        max_x = 0
+        max_y = 0
+        
         # keeping track of the height of each layer
         layer_heights = []
         # TODO: do this better
@@ -903,25 +906,28 @@ def combine_layers(particle_layers, layer_infos, filename):
         y_position_prism = 100000000000
         # looping through the layer(s)
         for info in layer_infos:
-            total_height += ((info[4]*2) + 1)
+            total_height += ((info[4]*2) + electrode_and_layer_spacing)
             layer_heights += [info[4]*2]
             total_volume += info[5]
-            # TODO: record max and min x and y values of prism and recalculate x and y lengths
-            if info[0] > x_length_prism:
-                x_length_prism = info[0]
-            if info[1] > y_length_prism:
-                y_length_prism = info[1]
+            if info[0] > max_x:
+                max_x = info[0]
+            if info[1] > max_y:
+                max_y = info[1]
             # if x and/or y position are the lowest yet, update the prism x and/or y postion 
             if info[2] < x_position_prism:
                 x_position_prism = info[2]
             if info[3] < y_position_prism:
                 y_position_prism = info[3]
+
+        x_length_prism = max_x - x_position_prism
+        y_length_prism = max_y - y_position_prism
+
         # calculate prism volume fraction
         volume_fraction = total_volume/(x_length_prism*y_length_prism*total_height)
                
         particleID = 1
         layer_counter = 0
-        height_adjustment = electrode_offset
+        height_adjustment = electrode_and_layer_spacing
         # loop through the layers
         for layer in particle_layers:
             # loop through the particles
@@ -951,7 +957,7 @@ def combine_layers(particle_layers, layer_infos, filename):
                     particleID += 1
 
             # add the height of the layer we just looped through and a space between layers to the height adjustment
-            height_adjustment += (layer_heights[layer_counter] + 1)
+            height_adjustment += (layer_heights[layer_counter] + electrode_and_layer_spacing)
             # increment layer counter
             layer_counter += 1
 
