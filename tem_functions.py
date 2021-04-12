@@ -592,6 +592,65 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs, nm_per_pixel)
     return short_pairs, particles
 
 
+# this function was taken from https://gist.github.com/LyleScott/e36e08bfb23b1f87af68c9051f985302
+def rotate_around_point(point, radians, origin=(0, 0)):
+    """Rotate a point around a given point.
+    
+    I call this the "low performance" version since it's recalculating
+    the same values more than once [cos(radians), sin(radians), x-ox, y-oy).
+    It's more readable than the next function, though.
+    """
+    x, y = point
+    ox, oy = origin
+
+    qx = ox + np.cos(radians) * (x - ox) + np.sin(radians) * (y - oy)
+    qy = oy + -np.sin(radians) * (x - ox) + np.cos(radians) * (y - oy)
+
+    return qx, qy
+
+
+def break_up_agglomerates(particles, agg_contours, nm_per_pixel, long_pairs, short_pairs):
+    """if match_images is unsuccessful at breaking up agglomerates, this can be used to replace agglomerates with spheres"""
+    new_particles = {}
+    max_area = np.square(expected_radius*2)*np.pi
+    max_id = np.max(list(particles.keys()))
+    for particle in particles:
+        particle_data = particles[particle]
+        if len(particle_data) == 5:
+            a = particle_data[2][1]
+            b = particle_data[4][1]
+            x = particle_data[0][1]
+            y = particle_data[1][1]
+            angle = -1*particle_data[3][1]
+            if a*b*np.pi > max_area:
+                num_particles_length = int(np.floor(2*a/(2*expected_radius+1)))
+                num_particles_width = int(np.floor(2*b/(2*expected_radius+1)))
+                agg_contour = np.asarray(agg_contours[particle])
+                if num_particles_length != 0:
+                    if num_particles_width == 0:
+                        num_particles_width = 1
+                    length_increment = 2*a/num_particles_length
+                    width_increment = 2*b/num_particles_width
+                    cur_x = x + a
+                    cur_y = y + b
+                    for i in range(num_particles_length):
+                        for k in range(num_particles_width):
+                            rot_x, rot_y = rotate_around_point([cur_x - length_increment/2, cur_y - width_increment/2], np.deg2rad(angle), [x, y])
+                            center = (int(rot_x * 1/nm_per_pixel), int(rot_y * 1/nm_per_pixel))
+                            if cv.pointPolygonTest(agg_contour, center, False) == 0.0:
+                                new_particles[max_id+1] = [('x', rot_x), ('y', rot_y), ('a', expected_radius), ('theta', 0), ('b', expected_radius)]
+                                max_id = max_id + 1
+                                long_pairs += [[max_id+1, (int((rot_x+expected_radius)/nm_per_pixel), int(rot_y/nm_per_pixel)), (int((rot_x-expected_radius)/nm_per_pixel), int(rot_y/nm_per_pixel))]]
+                                short_pairs += [([int(rot_x/nm_per_pixel), int((rot_y+expected_radius)/nm_per_pixel)], [int(rot_x/nm_per_pixel), int((rot_y-expected_radius)/nm_per_pixel)])]
+                            cur_y = cur_y - width_increment
+                        cur_y = y + b
+                        cur_x = cur_x - length_increment
+            else:
+                new_particles[particle] = particles[particle]
+                    
+    return new_particles
+
+
 def get_c(particles):
     """sets the c radius for each of the particles to be the average of the a and b radii for that particle or expected_radius"""
     # loop through all the particles
@@ -886,94 +945,145 @@ def get_layer_info(particles):
     return [max_x, max_y, min_x, min_y, max_c, layer_volume, volume_fraction]
 
 
-def combine_layers(particle_layers, layer_infos, filename):
-    """creating a text file from layer(s)"""
+def combine_layers(particle_layers, layer_infos):
+    """creating a particles dictionary and info list for a composite from a list of particle dictionaries and list of layer infos"""
+    electrode_and_layer_spacing = 0.0001
+
+    # keeping track of height, volume, and minimum and maximum x and y lengths of prism
+    total_height = electrode_and_layer_spacing
+    total_volume = 0
+
+    max_x = 0
+    max_y = 0
+    
+    # keeping track of the height of each layer
+    layer_heights = []
+    # TODO: do this better
+    x_position_prism = 100000000000
+    y_position_prism = 100000000000
+    # looping through the layer(s)
+    for info in layer_infos:
+        total_height += ((info[4]*2) + electrode_and_layer_spacing)
+        layer_heights += [info[4]*2]
+        total_volume += info[5]
+        if info[0] > max_x:
+            max_x = info[0]
+        if info[1] > max_y:
+            max_y = info[1]
+        # if x and/or y position are the lowest yet, update the prism x and/or y postion 
+        if info[2] < x_position_prism:
+            x_position_prism = info[2]
+        if info[3] < y_position_prism:
+            y_position_prism = info[3]
+
+    x_length_prism = max_x - x_position_prism
+    y_length_prism = max_y - y_position_prism
+
+    # calculate prism volume fraction
+    volume_fraction = total_volume/(x_length_prism*y_length_prism*total_height)
+
+    composite_info = [total_volume, x_length_prism, y_length_prism, total_height, x_position_prism, y_position_prism, volume_fraction]
+
+    composite_particles = {}
+    particleID = 1
+    layer_counter = 0
+    height_adjustment = electrode_and_layer_spacing
+    # loop through the layers
+    for layer in particle_layers:
+        # loop through the particles
+        for particle in layer:
+            # get particle data
+            particle_data = layer[particle]
+            # if the particle has an x and y position, a, b, and c radii, and an angle
+            if len(particle_data) == 6:
+
+                # calculating a randomized current height
+                leftover_space = layer_heights[layer_counter] - (particle_data[5][1]*2)
+                if leftover_space > 0.001:
+                    rand_offset = np.random.uniform(0, leftover_space)
+                    current_height = height_adjustment + particle_data[5][1] + rand_offset
+                else:
+                    current_height = height_adjustment + (layer_heights[layer_counter]/2)
+
+                composite_particles[particleID] = [particle_data[0], particle_data[1], particle_data[2], particle_data[3], particle_data[4], particle_data[5]]
+                composite_particles[particleID] += [("z", current_height)]
+                
+                particleID += 1
+
+        # add the height of the layer we just looped through and a space between layers to the height adjustment
+        height_adjustment += (layer_heights[layer_counter] + electrode_and_layer_spacing)
+        # increment layer counter
+        layer_counter += 1
+
+    return composite_particles, composite_info
+
+
+def get_electrode_particle_metric(composite_particles, composite_info):
+    """find the number of electrode particle interactions and the average distance between the particle and electrode for those interactions"""
+    num_interactions = 0
+    total_dist = 0
+    for particle in composite_particles:
+        particle_data = composite_particles[particle]
+        z = particle_data[6][1]
+        c = particle_data[5][1]
+        if (z-c) < 10: 
+            num_interactions += 1
+            total_dist += z-c
+        if (z+c) > (composite_info[3]-10):
+            num_interactions += 1
+            total_dist += composite_info[3]-(z+c)
+    if num_interactions != 0:
+        average_dist = total_dist/num_interactions
+    else:
+        average_dist = 0
+    composite_info += [num_interactions, average_dist]
+
+
+def get_volume_loading_metrics(composite_info, BTO_dielectric):
+    """find the expected dielectrics for the given volume loading in LDPE and epoxy matrices without field enhancements"""
+    vf = composite_info[6]
+    LDPE = vf*BTO_dielectric + (1-vf)*6.29
+    epoxy = vf*BTO_dielectric + (1-vf)*4.5
+    composite_info += [LDPE, epoxy]
+
+
+def generate_text_file(composite_particles, composite_info, filename):
+    """creating a text file from dictionary of particles"""
     # open the file to write in
     with open(filename, "w") as output_file:
-        electrode_and_layer_spacing = 0.0001
-
-        # keeping track of height, volume, and minimum and maximum x and y lengths of prism
-        total_height = electrode_and_layer_spacing
-        total_volume = 0
-
-        max_x = 0
-        max_y = 0
-        
-        # keeping track of the height of each layer
-        layer_heights = []
-        # TODO: do this better
-        x_position_prism = 100000000000
-        y_position_prism = 100000000000
-        # looping through the layer(s)
-        for info in layer_infos:
-            total_height += ((info[4]*2) + electrode_and_layer_spacing)
-            layer_heights += [info[4]*2]
-            total_volume += info[5]
-            if info[0] > max_x:
-                max_x = info[0]
-            if info[1] > max_y:
-                max_y = info[1]
-            # if x and/or y position are the lowest yet, update the prism x and/or y postion 
-            if info[2] < x_position_prism:
-                x_position_prism = info[2]
-            if info[3] < y_position_prism:
-                y_position_prism = info[3]
-
-        x_length_prism = max_x - x_position_prism
-        y_length_prism = max_y - y_position_prism
-
-        # calculate prism volume fraction
-        volume_fraction = total_volume/(x_length_prism*y_length_prism*total_height)
-               
         particleID = 1
-        layer_counter = 0
-        height_adjustment = electrode_and_layer_spacing
-        # loop through the layers
-        for layer in particle_layers:
-            # loop through the particles
-            for particle in layer:
-                # get particle data
-                particle_data = layer[particle]
-                # if the particle has an x and y position, a, b, and c radii, and an angle
-                if len(particle_data) == 6:
+        # loop through the particles
+        for particle in composite_particles:
+            # get particle data
+            particle_data = composite_particles[particle]
+            # if the particle has x, y, and z positions, a, b, and c radii, and an angle
+            if len(particle_data) == 7:
 
-                    # calculating a randomized current height
-                    leftover_space = np.round(layer_heights[layer_counter] - (particle_data[5][1]*2))
-                    if leftover_space > 0:
-                        rand_int = np.random.randint(0, leftover_space)
-                        current_height = height_adjustment + particle_data[5][1] + rand_int
-                    else:
-                        current_height = height_adjustment + (layer_heights[layer_counter]/2)
-
-                    # write all the data for the particle to the text file
-                    output_file.writelines(particle_data[2][0] + str(particleID) + " " + str(particle_data[2][1]) + "[nm]" + "\n")       # a
-                    output_file.writelines(particle_data[4][0] + str(particleID) + " " + str(particle_data[4][1]) + "[nm]" + "\n")       # b
-                    output_file.writelines(particle_data[5][0] + str(particleID) + " " + str(particle_data[5][1]) + "[nm]" + "\n")       # c
-                    output_file.writelines(particle_data[0][0] + str(particleID) + " " + str(particle_data[0][1]) + "[nm]" + "\n")       # x
-                    output_file.writelines(particle_data[1][0] + str(particleID) + " " + str(particle_data[1][1]) + "[nm]" + "\n")       # y
-                    output_file.writelines("z" + str(particleID) + " " + str(current_height) + "[nm]" + "\n")                            # z
-                    output_file.writelines(particle_data[3][0] + str(particleID) + " " + str(particle_data[3][1]) + "[degrees]" + "\n")  # theta
-                    # increment particleID
-                    particleID += 1
-
-            # add the height of the layer we just looped through and a space between layers to the height adjustment
-            height_adjustment += (layer_heights[layer_counter] + electrode_and_layer_spacing)
-            # increment layer counter
-            layer_counter += 1
+                # write all the data for the particle to the text file
+                output_file.writelines(particle_data[2][0] + str(particleID) + " " + str(particle_data[2][1]) + "[nm]" + "\n")       # a
+                output_file.writelines(particle_data[4][0] + str(particleID) + " " + str(particle_data[4][1]) + "[nm]" + "\n")       # b
+                output_file.writelines(particle_data[5][0] + str(particleID) + " " + str(particle_data[5][1]) + "[nm]" + "\n")       # c
+                output_file.writelines(particle_data[0][0] + str(particleID) + " " + str(particle_data[0][1]) + "[nm]" + "\n")       # x
+                output_file.writelines(particle_data[1][0] + str(particleID) + " " + str(particle_data[1][1]) + "[nm]" + "\n")       # y
+                output_file.writelines(particle_data[6][0] + str(particleID) + " " + str(particle_data[6][1]) + "[nm]" + "\n")       # z
+                output_file.writelines(particle_data[3][0] + str(particleID) + " " + str(particle_data[3][1]) + "[degrees]" + "\n")  # theta
+                # increment particleID
+                particleID += 1
 
         # write the information for the composite to the end of the file
         output_file.writelines("*****************\n")
-        output_file.writelines("total_particles " + str(particleID-1) + "\n")                    # number of particles
-        output_file.writelines("total_volume_ellipsoids " + str(total_volume) + "[nm^3]" + "\n") # total volume
-        output_file.writelines("x_length_prism " + str(x_length_prism) + "[nm]" + "\n")          # x length prism
-        output_file.writelines("y_length_prism " + str(y_length_prism) + "[nm]" + "\n")          # y length prism
-        output_file.writelines("z_length_prism " + str(total_height) + "[nm]" + "\n")            # z length prism
-        output_file.writelines("x_position_prism " + str(x_position_prism) + "[nm]" + "\n")      # x position prism
-        output_file.writelines("y_position_prism " + str(y_position_prism) + "[nm]" + "\n")      # x position prism
-        output_file.writelines("volume_fraction " + str(volume_fraction))                        # volume fraction
-        
-        # delete duplicate particles (TODO: do this better)
-        # loop through 
- 
+        output_file.writelines("total_particles " + str(particleID-1) + "\n")                                   # number of particles
+        output_file.writelines("total_volume_ellipsoids " + str(composite_info[0]) + "[nm^3]" + "\n")           # total volume
+        output_file.writelines("x_length_prism " + str(composite_info[1]) + "[nm]" + "\n")                      # x length prism
+        output_file.writelines("y_length_prism " + str(composite_info[2]) + "[nm]" + "\n")                      # y length prism
+        output_file.writelines("z_length_prism " + str(composite_info[3]) + "[nm]" + "\n")                      # z length prism
+        output_file.writelines("x_position_prism " + str(composite_info[4]) + "[nm]" + "\n")                    # x position prism
+        output_file.writelines("y_position_prism " + str(composite_info[5]) + "[nm]" + "\n")                    # x position prism
+        output_file.writelines("volume_fraction " + str(composite_info[6]) + "\n")                              # volume fraction
+        output_file.writelines("number_particles_within_10nm_of_electrode " + str(composite_info[7])+ "\n")     # number of particle electrode interactions
+        output_file.writelines("average_particle_electrode_distance " + str(composite_info[8])+ "[nm]"+ "\n")   # particle electrode average distance
+        # output_file.writelines("volume_loading_dielectric_LDPE " + str(composite_info[9])+ "\n")                # dielectric based off volume loading in LDPE
+        # output_file.writelines("volume_loading_dielectric_epoxy " + str(composite_info[10]))                    # dielectric based off volume loading in epoxy
+
         # close output file
         output_file.close()

@@ -177,10 +177,85 @@ def layer_render(particles, layer_info, rendering_type="wireframe"):
                 ay.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
                 az.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
 
-    ax.set_zlim(0, (layer_info[2]+layer_info[0]))
-    ay.set_zlim(0, (layer_info[2]+layer_info[0]))
-    az.set_zlim(0, (layer_info[2]+layer_info[0]))
-    plt.xlim([layer_info[2], layer_info[2]+layer_info[0]])
-    plt.ylim([layer_info[3], layer_info[3]+layer_info[1]])
+    ax.set_zlim(layer_info[2], layer_info[0])
+    ay.set_zlim(layer_info[3], layer_info[0])
+    az.set_zlim(0, layer_info[0])
+    plt.xlim([layer_info[2], layer_info[0]])
+    plt.ylim([layer_info[3], layer_info[0]])
+
+    plt.show()
+
+def composite_render(composite_particles, composite_info, rendering_type="wireframe"):
+    """renders a dictionary of particles"""
+    fig4 = plt.figure(4)
+    fig5 = plt.figure(5)
+    fig6 = plt.figure(6)
+
+    ax2 = fig4.add_subplot(111, projection='3d')
+    # ax = Axes3D(fig1)
+    ax2.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    ax2.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    ax2.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    ay2 = fig5.add_subplot(111, projection='3d')
+    # ay = Axes3D(fig2)
+    ay2.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    ay2.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    ay2.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    az2 = fig6.add_subplot(111, projection='3d')
+    # az = Axes3D(fig3)
+    az2.set_xlabel("$X$", fontsize = 20, rotation = 150)
+    az2.set_ylabel("$Y$", fontsize = 20, rotation = 150)
+    az2.set_zlabel("$Z$", fontsize = 20, rotation = 150)
+
+    ax2.view_init(elev=0, azim=0)
+    ay2.view_init(elev=0, azim=-90)
+    az2.view_init(elev=90, azim=-90)
+
+    for particle in composite_particles:
+        # get particle data
+        particle_data = composite_particles[particle]
+        # if the particle has an x and y position, a, b, and c radii, and an angle
+        if len(particle_data) == 7:
+            # extract particle info
+            center_x = particle_data[0][1]
+            center_y = particle_data[1][1]
+            center_z = particle_data[6][1]
+            a_radius = particle_data[2][1]
+            b_radius = particle_data[4][1]
+            c_radius = particle_data[5][1]
+            theta = particle_data[3][1]
+            
+            # plot the ellipsoid
+            u = np.linspace(0, 2 * np.pi, 100)
+            v = np.linspace(0, np.pi, 100)
+
+            # converting theta from degrees to radians
+            theta = theta/180*np.pi
+
+            x1_1 = np.outer(a_radius * np.cos(u), np.sin(v)) + center_x
+            y1_1 = np.outer(b_radius * np.sin(u), np.sin(v)) + center_y
+            z = np.outer(c_radius * np.ones(np.size(u)), np.cos(v)) + center_z
+            x = np.cos(theta) * (x1_1 - center_x) - np.sin(theta) * (y1_1 - center_y) + center_x
+            y = np.sin(theta) * (x1_1 - center_x) + np.cos(theta) * (y1_1 - center_y) + center_y
+
+            if rendering_type == "surface":
+            #colored ellipsoid -- here the particles look like colored balloons: pretty but takes a couple extra seconds to run.
+                ax2.plot_surface(x, y, z, linewidth=0.0)
+                ay2.plot_surface(x, y, z, linewidth=0.0)
+                az2.plot_surface(x, y, z, linewidth=0.0)
+
+            if rendering_type == "wireframe":
+            #wireframe rendering -- this is a mesh sort of look. Runs more quickly.
+                ax2.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+                ay2.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+                az2.plot_wireframe(x, y, z, rstride=25, cstride=25, color='b', alpha=0.3)
+
+    ax2.set_zlim(composite_info[4], (composite_info[4]+composite_info[1]))
+    ay2.set_zlim(composite_info[5], (composite_info[4]+composite_info[1]))
+    az2.set_zlim(0, (composite_info[4]+composite_info[1]))
+    plt.xlim([composite_info[4], composite_info[4]+composite_info[1]])
+    plt.ylim([composite_info[5], composite_info[4]+composite_info[1]])
 
     plt.show()
