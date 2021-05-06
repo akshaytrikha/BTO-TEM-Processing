@@ -64,7 +64,7 @@ def pipeline_test(inputs):
 
     return time.perf_counter() - start
 
-
+# TODO: This is outdated and needs to be updated to match the jupyter notebook
 def pipeline(image_names, thresholds, scales, output_file, debug=False):
     """combines all functions to create image processing pipeline, prints each function's execution time if debug=True"""
 

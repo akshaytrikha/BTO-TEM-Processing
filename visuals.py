@@ -259,3 +259,18 @@ def composite_render(composite_particles, composite_info, rendering_type="wirefr
     plt.ylim([composite_info[5], composite_info[4]+composite_info[1]])
 
     plt.show()
+
+def draw_merged_contours(image, merge_contours):
+    """draws the contours resulting from merging agglomerates and individual particles"""
+    for particle in merge_contours:
+        for pixel in merge_contours[particle]:
+            image[pixel[1]][pixel[0]] = [255, 0, 0]
+
+def annotate_TEM(color_image, long_pairs, short_pairs, merge_contour_colors):
+    """draws contours, short, and long chord lengths on TEM image"""
+    annotated_image = color_image.copy()
+    draw_long_lengths(annotated_image, long_pairs)
+    draw_short_lengths(annotated_image, short_pairs)
+    draw_merged_contours(annotated_image, merge_contour_colors)
+
+    return annotated_image

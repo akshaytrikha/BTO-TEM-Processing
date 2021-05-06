@@ -130,7 +130,7 @@ def get_watershed_threshold(dist_transform, sure_bg, color_image, expected_radiu
 
 
 @njit
-def get_contour_colors_helper(contour_colors, watershed_markers,chords_color_copy):
+def get_contour_colors_helper(contour_colors, watershed_markers, chords_color_copy):
     contour_size = 0
     # loop through pixels in watershed markers
     for row in range(1, len(watershed_markers) - 1):		# TODO: don't ignore border particles
@@ -533,6 +533,9 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs, nm_per_pixel)
     # store min pixel pairs to visualize lines
     short_pairs = []
     
+    # create list of indices to delete from long_chords
+    to_be_deleted = []
+
     # process pairs to keep ones with min score
     for i in range(len(short_pixels)):
         if len(short_pixels[i]) >= 2:
@@ -588,6 +591,16 @@ def get_short_chord_lengths(particles, contour_colors, long_pairs, nm_per_pixel)
                 
                 # store pixels for cv.line() later
                 short_pairs += [(min_pixel_1, min_pixel_2)]
+
+            # delete corresponding long chord and contour
+            else:
+                # list the indices of particles to be deleted from largest to smallest so deletions do not affect subsequent indices
+                to_be_deleted = [i] + to_be_deleted
+                del contour_colors[long_pairs[i][0]]
+
+    # delete long chords for particles that are too small
+    for index in to_be_deleted:
+        del long_pairs[index]
 
     return short_pairs, particles
 
@@ -702,6 +715,7 @@ def set_max_c(particles):
 
 # TODO: find root cause of duplicate particles and fix there, this is a temporary fix
 def delete_duplicates(particles):
+    """deletes duplicate particles based on centerpoints"""
     # dictionary that maps (x,y) centerpoints to particle ids
     centerpoints = {}
     for id in list(particles):
@@ -1039,12 +1053,34 @@ def get_electrode_particle_metric(composite_particles, composite_info):
     composite_info += [num_interactions, average_dist]
 
 
-def get_volume_loading_metrics(composite_info, BTO_dielectric):
-    """find the expected dielectrics for the given volume loading in LDPE and epoxy matrices without field enhancements"""
-    vf = composite_info[6]
-    LDPE = vf*BTO_dielectric + (1-vf)*6.29
-    epoxy = vf*BTO_dielectric + (1-vf)*4.5
-    composite_info += [LDPE, epoxy]
+def decrease_vol_loading(composite_particles, composite_info, desired_vol_loading):
+    """takes a particle dictionary and randomly deletes particles until it hits the target volume loading"""
+    vol_loading = composite_info[6]
+    total_particles_vol = composite_info[0]
+    vol_prism = composite_info[1] * composite_info[2] * composite_info[3]
+    particles_deleted = []
+    max_ID = np.max(list(composite_particles.keys()))
+    while vol_loading > desired_vol_loading and (vol_loading-desired_vol_loading) >= 0.005:
+        random_id = rand_int = np.random.randint(1, max_ID)
+        while random_id in particles_deleted:
+            random_id = rand_int = np.random.randint(1, max_ID)
+        particle_data = composite_particles[random_id]
+        a = particle_data[2][1]
+        b = particle_data[4][1]
+        c = particle_data[5][1]
+        total_particles_vol -= (4/3)*np.pi*a*b*c
+        vol_loading = total_particles_vol/vol_prism
+        particles_deleted += [random_id]
+        
+    new_particles = {}
+    for particle in composite_particles:
+        if particle not in particles_deleted:
+            particle_data = composite_particles[particle]
+            new_particles[particle] = [particle_data[0], particle_data[1], particle_data[2], particle_data[3], particle_data[4], particle_data[5], particle_data[6]]
+    
+    new_info = [total_particles_vol, composite_info[1], composite_info[2], composite_info[3], composite_info[4], composite_info[5], vol_loading]
+    
+    return new_particles, new_info
 
 
 def generate_text_file(composite_particles, composite_info, filename):
